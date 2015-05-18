@@ -27,7 +27,6 @@
 
 // ISO C++ 98 headers.
 #include <iostream>
-#include <pthread.h>
 
 //OpenCV headers
 #include <opencv2/opencv.hpp>
@@ -53,7 +52,7 @@
 
 namespace Vision
 {
-  namespace Video_Stream
+  namespace Video_Save
   {
     using DUNE_NAMESPACES;
     
@@ -65,20 +64,22 @@ namespace Vision
       RASPIVID_CONFIG * config;
       //Capture struct - OpenCV/RaspiCAM
       RaspiCamCvCapture* capture;
+      //Buffer for video frame
+      CvVideoWriter *writer;
+      //Define Font Letter OpenCV
+      CvFont font;
+      //IplImage main
+      IplImage* frame;
       #else
+      //cv::Mat main frame
+      cv::Mat frame;
+      //Buffer for video frame
+      cv::VideoWriter output_cap;
       //Capture struct - OpenCV
-      CvCapture* capture;
+      cv::VideoCapture capture_mat;
       #endif
       //Read time and data
       struct tm* local;
-      //IplImage image_capture
-      IplImage* img;
-      //IplImage main
-      IplImage* frame;
-      //Buffer for Zlib Data
-      IplImage* zlib_data;
-      //Define Font Letter OpenCV
-      CvFont font;
       //Main frame width
       int frame_width;
       //Main frame height
@@ -201,8 +202,8 @@ namespace Vision
         
         #if raspicam_on == 1
         config = (RASPIVID_CONFIG*)malloc(sizeof(RASPIVID_CONFIG));
-        inic_width = 320;
-        inic_height = 240;
+        inic_width = 1280;
+        inic_height = 720;
         config->width = inic_width;
         config->height = inic_height;
         config->bitrate = 0; // zero: leave as default
@@ -212,6 +213,59 @@ namespace Vision
         inic_width = 640;
         inic_height = 480;
         #endif
+      }
+      
+      /* Save Video Frame Result */
+      #if raspicam_on == 1
+      void save_video(IplImage* image, bool parameter)
+      #else
+      void save_video(cv::Mat image, bool parameter)
+      #endif
+      {
+        if (flag_stat_video == 0 && parameter == 1)
+        {
+          #ifdef linux
+          sprintf(local_dir,"mkdir /home/$USER/%d_%d_%d_log_video -p",day,mon,year);
+          str_dir = system(local_dir);
+          user_name = getenv ("USER");
+          sprintf(local_dir,"/home/%s/%d_%d_%d_log_video", user_name, day, mon, year);
+          sprintf(text,"%s/%d_%d_%d___%d_%d_%d.avi",local_dir,hour,min,sec,day,mon,year);
+          #endif
+          
+          #ifdef _WIN32
+          str_dir = system("cd C:\ ");
+          sprintf(local_dir,"mkdir %d_%d_%d_log_video",day,mon,year);
+          str_dir = system(local_dir);
+          sprintf(local_dir,"C:\%d_%d_%d_log_video",day,mon,year);
+          sprintf(text,"%s\%d_%d_%d___%d_%d_%d.avi",local_dir,hour,min,sec,day,mon,year);
+          #endif
+          
+          #if raspicam_on == 1
+          writer = cvCreateVideoWriter(text, CV_FOURCC('D','I','V','X'), 10, cvGetSize(image), 1);
+          #else
+          frame_height = image.rows;
+          frame_width = image.cols;
+          output_cap = cv::VideoWriter(text, CV_FOURCC('X', 'V', 'I', 'D'), 10, cvSize(frame_width, frame_height), 1);
+          #endif
+          flag_stat_video = 1;
+
+        }
+        
+        if (flag_stat_video == 1 && parameter == 1)
+        #if raspicam_on == 1
+          cvWriteFrame(writer, image);      // add the frame to the file
+        #else
+          output_cap.write(image);      // add the frame to the file
+        #endif
+        else if (flag_stat_video == 1 && parameter == 0)
+        {
+          #if raspicam_on == 1
+          cvReleaseVideoWriter( &writer );
+          #else
+          output_cap.release();
+          #endif
+          flag_stat_video = 0;
+        }
       }
       
       /*Time acquisition */
@@ -230,116 +284,20 @@ namespace Vision
         year = local -> tm_year + 1900;
       }
       
-      /* Inic TCP connections */
-      void 
-      InicTCP(bool state)
-      {
-        if (!state)
-        {
-          portno = 2424;
-          sockfd = socket(AF_INET, SOCK_STREAM, 0);
-          if (sockfd < 0)
-          {
-            inf("ERROR opening socket");
-            exit(0);
-          }
-          server = gethostbyname("pedro");
-          if (server == NULL)
-          {
-            inf("ERROR, no such host");
-            exit(0);
-          }
-          inf("Wainting connection TCP-IP...");
-          bzero((char *) &serv_addr, sizeof(serv_addr));
-          serv_addr.sin_family = AF_INET;
-          bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
-          serv_addr.sin_port = htons(portno);
-          while(connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0);
-          inf("Connection TCP-IP ON");
-        }
-        else
-        {
-          //Send info size image over tcp
-          inf("Sending Data image info...");
-          sprintf(buffer,"320\n");
-          n = send(sockfd, buffer, strlen(buffer), 0);
-          if (n < 0)
-          {
-            inf("ERROR writing to socket: Image Size Width");
-            exit(0);
-          }
-          sprintf(buffer,"240\n");
-          n = send(sockfd, buffer, strlen(buffer), 0);
-          if (n < 0)
-          {
-            inf("ERROR writing to socket: Image Size Height");
-            exit(0);
-          }
-          inf("Sending Data image info Done (320 x 240) ...");
-        }
-      }
-      
       void
       clean_buffer(int value)
       {
         cnt=0;
         while(cnt<value)
         {
-          cvGrabFrame(capture);
+          capture_mat >> frame;
           //frame = cvQueryFrame( capture );
           cnt++;
         }
+        time_acquisition();
+        inf("Start... Hour: %d:%d:%d \t TASK: STREAM",hour,min,sec);
       }
 
-      void
-      inic_Capture(void)
-      {
-        #if raspicam_on == 1
-        capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
-        #else
-        //cvSetCaptureProperty( capture, 5, 8);
-        //capture = cvCaptureFromFile("rtsp://10.0.20.207:554/live/ch00_0"); //for airvision mini SENS-11
-        //capture = cvCaptureFromCAM(0);//for laptop cam
-        //capture = cvCaptureFromFile("http://10.0.20.102/axis-cgi/mjpg/video.cgi?resolution=320x240&.mjpg"); //for axis cam
-        //capture = cvCaptureFromFile("http://10.0.3.31:8080/video.wmv"); //for stream video640x480
-        capture = cvCaptureFromFile("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Mobile");
-        #endif
-        
-        while ( capture  == 0 && !stopping())
-        {
-          inf("ERROR OPEN CAM\n");
-          #if raspicam_on == 1
-          capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
-          #else
-          //cvSetCaptureProperty( capture, 5, 8);
-          //capture = cvCaptureFromFile("http://10.0.20.102/axis-cgi/mjpg/video.cgi?resolution=320x240&.mjpg"); //for axis cam
-          capture = cvCaptureFromFile("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Mobile");
-          #endif
-          cnt++;
-          waitForMessages(1.0);
-        }
-        
-        if ( capture )
-        {
-          //Capture Image
-          #if raspicam_on == 1
-          img = raspiCamCvQueryFrame(capture);
-          cvReleaseImage( &frame );
-          if (frame == 0 )
-            frame = cvCreateImage ( cvSize(inic_width, inic_height), img -> depth, img -> nChannels);
-          cvResize(img, frame);
-          #else
-          //cvSetCaptureProperty( capture, 5, 8);
-          clean_buffer(50);
-          frame = cvQueryFrame( capture );
-          #endif
-          
-          //Size of Image capture
-          frame_width = frame -> width;
-          frame_height = frame -> height;
-          inf("Image Size: %d x %d \t TASK: STREAM",frame_width, frame_height);
-        }
-      }
       //! Main loop.
       void
       onMain(void)
@@ -347,100 +305,117 @@ namespace Vision
         //IMC::CompressedImage msg;
         //Initialize Values
         InicValues();
-        InicTCP(0);
+        #if raspicam_on == 1
+        capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
+        //Font Opencv
+        cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, 1, 1, 0, 1, 8);
+        #else
+        //cvSetCaptureProperty( capture, 5, 16);
+        //capture = cvCaptureFromFile("rtsp://10.0.20.207:554/live/ch00_0"); //for airvision mini SENS-11
+        //capture = cvCaptureFromCAM(0);//for laptop cam
+        //capture = cvCaptureFromFile("rtsp://10.0.20.112:554/axis-media/media.amp"); //for axis cam
+        //capture = cvCaptureFromFile("http://10.0.20.112/axis-cgi/mjpg/video.cgi?resolution=1280x720&.mjpg"); //for axis cam
+        capture_mat.open("rtsp://10.0.20.102:554/axis-media/media.amp");//?streamprofile=Quality");
+        #endif
         
-        inic_Capture();
-                
-        InicTCP(1);
+        #if raspicam_on == 1
+        while ( capture == 0 && !stopping())
+        #else
+        while ( !capture_mat.isOpened() && !stopping())
+        #endif 
+        {
+          inf("\n\tERROR OPEN CAM\n");
+          #if raspicam_on == 1
+          capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
+          #else
+          //cvSetCaptureProperty( capture, 5, 16);
+          //capture = cvCaptureFromFile("rtsp://10.0.20.112:554/axis-media/media.amp"); //for axis cam
+          //capture = cvCaptureFromFile("http://10.0.20.112/axis-cgi/mjpg/video.cgi?resolution=1280x720&.mjpg"); //for axis cam
+          capture_mat.open("rtsp://10.0.20.102:554/axis-media/media.amp");//?streamprofile=Quality");
+          #endif
+          cnt++;
+          waitForMessages(1.0);
+        }
         
+        #if raspicam_on == 1
+        if ( capture )
+        #else
+        if ( capture_mat.isOpened() )
+        #endif 
+        {
+          //Capture Image
+          #if raspicam_on == 1
+          frame = raspiCamCvQueryFrame(capture);
+       /*   cvReleaseImage( &frame );
+          if (frame == 0 )
+            frame = cvCreateImage ( cvSize(inic_width, inic_height), img -> depth, img -> nChannels);
+          cvResize(img, frame);*/
+          //Size of Image capture
+          frame_width = frame -> width;
+          frame_height = frame -> height;
+          inf("Image Size: %d x %d\t TASK: SAVE",frame_width, frame_height);
+          #else
+          //frame = cvQueryFrame( capture );
+          capture_mat >> frame;
+          frame_height = frame.rows;
+          frame_width = frame.cols;
+          inf("Image Size: %d x %d\t TASK: SAVE",frame_width, frame_height);
+          clean_buffer(50);
+          #endif
+        }
+        
+        cnt=1;
+        time_acquisition();
+        inf("Start... Hour: %d:%d:%d \t TASK: SAVE",hour,min,sec);
+
         while (!stopping())
         {
-          while(n >= 0 && !stopping())
+          #if raspicam_on == 1
+          frame = raspiCamCvQueryFrame(capture);
+          #else
+          capture_mat >> frame;
+          #endif
+          
+          #if raspicam_on == 1
+          if ( !capture )
           {
-            #if raspicam_on == 1
-            img = raspiCamCvQueryFrame(capture);
-            cvReleaseImage( &frame );
-            if (frame == 0 )
-              frame = cvCreateImage ( cvSize(inic_width, inic_height), img -> depth, img -> nChannels);
-            cvResize(img, frame);
-            #else
-            frame = cvQueryFrame( capture );
-            #endif
-            
-            if ( !capture )
-            {
-              inf("ERROR GRAB IMAGE");
-            }            
-       
-            if (zlib_data == NULL)
-              zlib_data = cvCreateImage(cvGetSize(frame),8,3);
-            
-            dsize = frame->imageSize + (frame->imageSize * 0.1f) + 20;
-            
-            result = compress2((unsigned char *)zlib_data->imageData, &dsize, (const unsigned char 
-            *)frame->imageData, frame->imageSize, 5);
-       
-            if(result != Z_OK)
-              inf("Compress error occured!");
-            
-            //send data size
-            sprintf(buffer,"%ld\n",dsize);
-            n = send(sockfd, buffer, strlen(buffer), 0);
-            if (n < 0)
-              inf("ERROR writing to socket: Send Data Size Image");
-            
-            ok_send = 0;
-            tam_ok=0;
-            cnt_refresh_sync=0;
-            while(ok_send == 0)
-            {
-              ///recv data for sync and debug
-              n = recv(sockfd, buffer, 20, 0);
-              tam_ok = strlen(buffer);
-              if (n <= 0)
-                inf("ERROR reading of socket");
-              
-              if(tam_ok == 1)
-              {    
-                ok_send = atoi(buffer);
-              }
-              
-              cnt_refresh_sync++;
-              if (cnt_refresh_sync > 6)
-              {
-                ok_send = 1;
-                //inf("\nRefresh Sync...\n");
-              }
-            }
-            
-            //send data image
-            n = send(sockfd, zlib_data->imageData, dsize, 0);
-            //        printf("\nSend %d OK %d",n,dsize);
-            if (n < 0)
-              inf("ERROR writing to socket");
-            
-            cvReleaseImage(&zlib_data);
+            inf("ERROR GRAB IMAGE");
           }
-          if(!stopping())
+          #else
+          if ( !capture_mat.isOpened() )
           {
-            close(sockfd);
-            #if raspicam_on == 1
-            raspiCamCvReleaseCapture( &capture );
-            #else
-            cvReleaseCapture(&capture);
-            #endif
-            inf("Restarting connection TCP-IP...");
-            InicTCP(0);
-            InicTCP(1);
-            inic_Capture();
-          }
+            inf("ERROR GRAB IMAGE");
+          } 
+          #endif
+          
+
+          //Add information in frame result
+          time_acquisition();
+          #if raspicam_on == 1
+          sprintf(text,"Hour: %d:%d:%d",hour,min,sec);
+          cvPutText(frame, text, cvPoint(10, 20), &font, cvScalar(20, 90, 250, 0));
+          sprintf(text,"Data: %d/%d/%d",day,mon,year);
+          cvPutText(frame, text, cvPoint(10, 42), &font, cvScalar(20, 90, 250, 0));
+          text[0]='\0';
+          //Save video
+          save_video(frame, 1);
+          #else
+          sprintf(text,"Hour: %d:%d:%d",hour,min,sec);
+          cv::putText(frame, text, cv::Point(10, 22), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(250, 90, 20, 0),1.8, CV_AA);
+          sprintf(text,"Data: %d/%d/%d",day,mon,year);
+          cv::putText(frame, text, cv::Point(10, 42), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(250, 90, 20, 0),1.8, CV_AA);
+          text[0]='\0';
+          //Save video
+          save_video(frame, 1);
+          #endif
         }
+        save_video( frame, 0);
+        //cvDestroyWindow( "Live Video" );
         #if raspicam_on == 1
         raspiCamCvReleaseCapture( &capture );
         #else
-        cvReleaseCapture(&capture);
+        capture_mat.release();
         #endif
-        close(sockfd);
       }
     };
   }
