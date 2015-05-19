@@ -56,9 +56,14 @@ namespace Vision
   namespace Video_Stream
   {
     using DUNE_NAMESPACES;
-    
+    struct Arguments
+      {
+        // - host name
+        std::vector<std::string> host;
+      };
     struct Task: public DUNE::Tasks::Task
     {
+      Arguments m_args;
       //!Variables
       #if raspicam_on == 1
       //RaspiCam config
@@ -93,8 +98,8 @@ namespace Vision
       char local_dir[80];
       //Result of search local dir
       int str_dir;
-      //User Name
-      const char* user_name;
+      //Host Name
+      const char* host_name;
       //Global counter
       int cnt;
       //Flag - stat of video record
@@ -129,6 +134,10 @@ namespace Vision
       int tam_ok;
       //Counter for refresh sync
       int cnt_refresh_sync;
+      //Latitude
+      float lat;
+      //Longitude
+      float lon;
       
       //! Constructor.
       //! @param[in] name task name.
@@ -136,6 +145,9 @@ namespace Vision
       Task(const std::string& name, Tasks::Context& ctx):
       DUNE::Tasks::Task(name, ctx)
       {
+        param("Host", m_args.host)
+          //.defaultValue("localhost")
+          .description("Name of the client in network");
         /* param("Window Search Size", m_args.window_search_size)
          *        .defaultValue("55")
          *        .minimumValue("30")
@@ -154,7 +166,7 @@ namespace Vision
          *        .maximumValue("12")
          *        .description("Number of repetitions before the tpl refresh");*/
         
-        //bind<IMC::Tracking>(this);
+        bind<IMC::EstimatedState>(this);
       }
       
       //! Update internal state with new parameter values.
@@ -173,6 +185,10 @@ namespace Vision
       void
       onEntityResolution(void)
       {
+        for (unsigned int i = 0; i < m_args.host.size(); ++i)
+        {
+          host_name = m_args.host[0].c_str();
+        }
       }
       
       //! Acquire resources.
@@ -193,6 +209,13 @@ namespace Vision
       {
       }
       
+      void
+      consume(const IMC::EstimatedState* msg)
+      {
+        lat = msg->lat;
+        lon = msg->lon;
+        inf("Lat = %f   Lon = %f", lat, lon);
+      }
       //! Initialize Values
       void 
       InicValues(void)
@@ -243,7 +266,7 @@ namespace Vision
             inf("ERROR opening socket");
             exit(0);
           }
-          server = gethostbyname("pedro");
+          server = gethostbyname(host_name);
           if (server == NULL)
           {
             inf("ERROR, no such host");
@@ -343,8 +366,9 @@ namespace Vision
       //! Main loop.
       void
       onMain(void)
-      {        
-        //IMC::CompressedImage msg;
+      {
+        //inf("\n >>>>  Nome : %s  <<<< \n\n",m_args.host[0].c_str());
+        IMC::EstimatedState msg;
         //Initialize Values
         InicValues();
         InicTCP(0);
