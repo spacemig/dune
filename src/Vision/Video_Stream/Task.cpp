@@ -70,6 +70,8 @@ namespace Vision
       RASPIVID_CONFIG * config;
       //Capture struct - OpenCV/RaspiCAM
       RaspiCamCvCapture* capture;
+      //Buffer for video frame
+      CvVideoWriter *writer;
       #else
       //Capture struct - OpenCV
       CvCapture* capture;
@@ -212,9 +214,11 @@ namespace Vision
       void
       consume(const IMC::EstimatedState* msg)
       {
+        //inf("Source (DUNE instance) ID is: %d", msg->getSource());
+        //inf("Source entity (Task instance) is: %s", resolveEntity(msg->getSourceEntity()).c_str());
         lat = msg->lat;
         lon = msg->lon;
-        inf("Lat = %f   Lon = %f", lat, lon);
+        //inf("Lat = %f   Lon = %f", lat, lon);
       }
       //! Initialize Values
       void 
@@ -277,31 +281,68 @@ namespace Vision
           serv_addr.sin_family = AF_INET;
           bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
           serv_addr.sin_port = htons(portno);
-          while(connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0);
+          while(connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0 && !stopping())
+          {
+            waitForMessages(0);
+          }
           inf("Connection TCP-IP ON");
         }
         else
         {
           //Send info size image over tcp
           inf("Sending Data image info...");
-          sprintf(buffer,"320\n");
+          sprintf(buffer,"%d\n",frame_width);
           n = send(sockfd, buffer, strlen(buffer), 0);
           if (n < 0)
           {
             inf("ERROR writing to socket: Image Size Width");
             exit(0);
           }
-          sprintf(buffer,"240\n");
+          sprintf(buffer,"%d\n",frame_height);
           n = send(sockfd, buffer, strlen(buffer), 0);
           if (n < 0)
           {
             inf("ERROR writing to socket: Image Size Height");
             exit(0);
           }
-          inf("Sending Data image info Done (320 x 240) ...");
+          inf("Sending Data image info Done (%d x %d) ...",frame_width, frame_height);
         }
       }
       
+      #if raspicam_on == 1
+      /* Save Video Frame Result */
+      void save_video(IplImage* image, bool parameter)
+      {
+         #ifdef linux
+          sprintf(local_dir,"mkdir /home/$USER/%d_%d_%d_log_video -p",day,mon,year);
+          str_dir = system(local_dir);
+          user_name = getenv ("USER");
+          sprintf(local_dir,"/home/%s/%d_%d_%d_log_video", user_name, day, mon, year);
+          sprintf(text,"%s/%d_%d_%d___%d_%d_%d.avi",local_dir,hour,min,sec,day,mon,year);
+          #endif
+          
+          #ifdef _WIN32
+          str_dir = system("cd C:\ ");
+          sprintf(local_dir,"mkdir %d_%d_%d_log_video",day,mon,year);
+          str_dir = system(local_dir);
+          sprintf(local_dir,"C:\%d_%d_%d_log_video",day,mon,year);
+          sprintf(text,"%s\%d_%d_%d___%d_%d_%d.avi",local_dir,hour,min,sec,day,mon,year);
+          #endif
+          
+          writer = cvCreateVideoWriter(text, CV_FOURCC('D','I','V','X'), 10, cvGetSize(image), 1);
+          flag_stat_video = 1;
+        }
+        
+        if (flag_stat_video == 1 && parameter == 1)
+          cvWriteFrame(writer, image);      // add the frame to the file
+        else if (flag_stat_video == 1 && parameter == 0)
+        {
+          cvReleaseVideoWriter( &writer );
+          flag_stat_video = 0;
+        }
+      }
+      #endif
+
       void
       clean_buffer(int value)
       {
@@ -368,8 +409,8 @@ namespace Vision
       onMain(void)
       {
         //inf("\n >>>>  Nome : %s  <<<< \n\n",m_args.host[0].c_str());
-        IMC::EstimatedState msg;
-        //Initialize Values
+        //IMC::EstimatedState msg;
+        //Initialize Values 
         InicValues();
         InicTCP(0);
         
@@ -381,6 +422,7 @@ namespace Vision
         {
           while(n >= 0 && !stopping())
           {
+            waitForMessages(0);
             #if raspicam_on == 1
             img = raspiCamCvQueryFrame(capture);
             cvReleaseImage( &frame );
@@ -444,6 +486,10 @@ namespace Vision
               inf("ERROR writing to socket");
             
             cvReleaseImage(&zlib_data);
+            #if raspicam_on == 1
+            save_video(frame,1);
+            #endif
+            //cvWaitKey(20);
           }
           if(!stopping())
           {
@@ -461,6 +507,7 @@ namespace Vision
         }
         #if raspicam_on == 1
         raspiCamCvReleaseCapture( &capture );
+        save_video(frame,0);
         #else
         cvReleaseCapture(&capture);
         #endif

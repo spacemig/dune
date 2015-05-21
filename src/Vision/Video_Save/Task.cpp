@@ -130,6 +130,10 @@ namespace Vision
       int tam_ok;
       //Counter for refresh sync
       int cnt_refresh_sync;
+      //Start Time - Save func.
+      double t1;
+      //End Time - Save func.
+      double t2;
       
       //! Constructor.
       //! @param[in] name task name.
@@ -315,7 +319,7 @@ namespace Vision
         //capture = cvCaptureFromCAM(0);//for laptop cam
         //capture = cvCaptureFromFile("rtsp://10.0.20.112:554/axis-media/media.amp"); //for axis cam
         //capture = cvCaptureFromFile("http://10.0.20.112/axis-cgi/mjpg/video.cgi?resolution=1280x720&.mjpg"); //for axis cam
-        capture_mat.open("rtsp://10.0.20.102:554/axis-media/media.amp");//?streamprofile=Quality");
+        capture_mat.open("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Bandwidth");
         #endif
         
         #if raspicam_on == 1
@@ -331,7 +335,7 @@ namespace Vision
           //cvSetCaptureProperty( capture, 5, 16);
           //capture = cvCaptureFromFile("rtsp://10.0.20.112:554/axis-media/media.amp"); //for axis cam
           //capture = cvCaptureFromFile("http://10.0.20.112/axis-cgi/mjpg/video.cgi?resolution=1280x720&.mjpg"); //for axis cam
-          capture_mat.open("rtsp://10.0.20.102:554/axis-media/media.amp");//?streamprofile=Quality");
+          capture_mat.open("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Bandwidth");
           #endif
           cnt++;
           waitForMessages(1.0);
@@ -370,6 +374,7 @@ namespace Vision
 
         while (!stopping())
         {
+          t1=(double)cvGetTickCount();
           #if raspicam_on == 1
           frame = raspiCamCvQueryFrame(capture);
           #else
@@ -407,6 +412,13 @@ namespace Vision
           text[0]='\0';
           //Save video
           save_video(frame, 1);
+          t2=(double)cvGetTickCount();
+          while(((t2-t1)/(cvGetTickFrequency()*1000.))<(1000/11))
+          {
+            t2=(double)cvGetTickCount();
+          }
+          //inf("time: %gms  fps: %.2g\n",(t2-t1)/(cvGetTickFrequency()*1000.), 1000./((t2-t1)/(cvGetTickFrequency()*1000.)));
+        
           #endif
         }
         save_video( frame, 0);
