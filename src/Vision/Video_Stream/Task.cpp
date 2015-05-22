@@ -140,6 +140,10 @@ namespace Vision
       float lat;
       //Longitude
       float lon;
+      //Start Time - Save func.
+      double t1;
+      //End Time - Save func.
+      double t2;
       
       //! Constructor.
       //! @param[in] name task name.
@@ -422,7 +426,8 @@ namespace Vision
         {
           while(n >= 0 && !stopping())
           {
-            waitForMessages(0);
+            t1=(double)cvGetTickCount();
+            waitForMessages(0.01);
             #if raspicam_on == 1
             img = raspiCamCvQueryFrame(capture);
             cvReleaseImage( &frame );
@@ -489,6 +494,13 @@ namespace Vision
             #if raspicam_on == 1
             save_video(frame,1);
             #endif
+            t2=(double)cvGetTickCount();
+            while(((t2-t1)/(cvGetTickFrequency()*1000.))<(1000/11))
+            {
+              t2=(double)cvGetTickCount();
+            }
+            //inf(" >>>>> time: %gms  fps: %.2g\n",(t2-t1)/(cvGetTickFrequency()*1000.), 1000./((t2-t1)/(cvGetTickFrequency()*1000.)));
+          
             //cvWaitKey(20);
           }
           if(!stopping())
