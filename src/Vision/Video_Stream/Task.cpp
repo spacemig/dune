@@ -129,7 +129,7 @@ namespace Vision
       struct sockaddr_in serv_addr;
       struct hostent *server;
       //Buffer of tcp sender
-      char buffer[30];
+      char buffer[70];
       // Flag state for send data
       bool ok_send;
       //Size of data received
@@ -140,6 +140,8 @@ namespace Vision
       float lat;
       //Longitude
       float lon;
+      //Height
+      float heig;
       //Start Time - Save func.
       double t1;
       //End Time - Save func.
@@ -218,10 +220,21 @@ namespace Vision
       void
       consume(const IMC::EstimatedState* msg)
       {
-        //inf("Source (DUNE instance) ID is: %d", msg->getSource());
-        //inf("Source entity (Task instance) is: %s", resolveEntity(msg->getSourceEntity()).c_str());
-        lat = msg->lat;
-        lon = msg->lon;
+        //! update the position of vehicle
+        //LAT and LON rad
+        double lat_rad = msg->lat;
+        double lon_rad = msg->lon;
+        heig = msg->height;
+        //LAT and LON rad
+        //LAT and LON deg
+        double lat_deg = lat_rad*(180/M_PI);
+        double lon_deg = lon_rad*(180/M_PI);
+        //Offset (m)
+        double offset_n = msg->x;
+        double offset_e = msg->y;
+        //Lat and Lon final
+        lat = lat_deg + (180/M_PI)*(offset_e/6378137);
+        lon = lon_deg + (180/M_PI)*(offset_n/6378137)/cos(lat_deg);
         //inf("Lat = %f   Lon = %f", lat, lon);
       }
       //! Initialize Values
@@ -453,13 +466,12 @@ namespace Vision
        
             if(result != Z_OK)
               inf("Compress error occured!");
-            
             //send data size
             sprintf(buffer,"%ld\n",dsize);
             n = send(sockfd, buffer, strlen(buffer), 0);
             if (n < 0)
               inf("ERROR writing to socket: Send Data Size Image");
-            
+
             ok_send = 0;
             tam_ok=0;
             cnt_refresh_sync=0;
@@ -483,13 +495,18 @@ namespace Vision
                 //inf("\nRefresh Sync...\n");
               }
             }
-            
+
             //send data image
             n = send(sockfd, zlib_data->imageData, dsize, 0);
             //        printf("\nSend %d OK %d",n,dsize);
             if (n < 0)
               inf("ERROR writing to socket");
-            
+        
+            sprintf(buffer,"(TCP) LAT: %f # LON: %f # ALT: %.2f m\n", lat, lon, heig);
+            n = send(sockfd, buffer, strlen(buffer), 0);
+            if (n < 0)
+              inf("ERROR writing to socket: Send Data GPS");
+
             cvReleaseImage(&zlib_data);
             #if raspicam_on == 1
             save_video(frame,1);
@@ -499,6 +516,8 @@ namespace Vision
             {
               t2=(double)cvGetTickCount();
             }
+
+            //inf("Lat = %f   Lon = %f    Alt = %f", lat, lon, heig);
             //inf(" >>>>> time: %gms  fps: %.2g\n",(t2-t1)/(cvGetTickFrequency()*1000.), 1000./((t2-t1)/(cvGetTickFrequency()*1000.)));
           
             //cvWaitKey(20);

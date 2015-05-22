@@ -406,9 +406,9 @@ namespace Vision
           save_video(frame, 1);
           #else
           sprintf(text,"Hour: %d:%d:%d",hour,min,sec);
-          cv::putText(frame, text, cv::Point(10, 22), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(250, 160, 120, 0),1.8, CV_AA);
+          cv::putText(frame, text, cv::Point(10, 22), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
           sprintf(text,"Data: %d/%d/%d",day,mon,year);
-          cv::putText(frame, text, cv::Point(10, 42), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(250, 160, 120, 0),1.8, CV_AA);
+          cv::putText(frame, text, cv::Point(10, 42), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
           text[0]='\0';
           //Save video
           save_video(frame, 1);
