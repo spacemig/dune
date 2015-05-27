@@ -33,12 +33,14 @@
 #include <opencv2/opencv.hpp>
 
 //Enable(1) / disable(0) support for Raspicam
-#define raspicam_on 0
+#define raspicam_on 1
 
 //RaspiCAM headers
 #if raspicam_on == 1
 //RaspiCAM headers
 #include "RaspiCamCV.h"
+RaspiCamCvCapture* capture;
+int flag_capture=0;
 #endif
 
 //ZLib headers
@@ -60,6 +62,8 @@ namespace Vision
       {
         // - host name
         std::vector<std::string> host;
+        // - IpCam
+        std::vector<std::string> ipcam;
       };
     struct Task: public DUNE::Tasks::Task
     {
@@ -69,7 +73,7 @@ namespace Vision
       //RaspiCam config
       RASPIVID_CONFIG * config;
       //Capture struct - OpenCV/RaspiCAM
-      RaspiCamCvCapture* capture;
+      //RaspiCamCvCapture* capture;
       //Buffer for video frame
       CvVideoWriter *writer;
       #else
@@ -102,6 +106,10 @@ namespace Vision
       int str_dir;
       //Host Name
       const char* host_name;
+      //IpCam Addresses
+      const char* ipcam_addresses;
+      //User Name
+      const char* user_name;
       //Global counter
       int cnt;
       //Flag - stat of video record
@@ -156,23 +164,11 @@ namespace Vision
         param("Host", m_args.host)
           //.defaultValue("localhost")
           .description("Name of the client in network");
-        /* param("Window Search Size", m_args.window_search_size)
-         *        .defaultValue("55")
-         *        .minimumValue("30")
-         *        .maximumValue("155")
-         *        .description("Window Search Size");
-         *        
-         *        param("Template Size", m_args.tpl_size)
-         *        .defaultValue("25")
-         *        .minimumValue("25")
-         *        .maximumValue("150")
-         *        .description("Template Size");
-         *        
-         *        param("Number of repetitions before the tpl refresh", m_args.rep_tpl)
-         *        .defaultValue("6")
-         *        .minimumValue("0")
-         *        .maximumValue("12")
-         *        .description("Number of repetitions before the tpl refresh");*/
+
+        param("IpCam", m_args.ipcam)
+          //.defaultValue("localhost")
+          .description("IpCam Addresses");
+        
         
         bind<IMC::EstimatedState>(this);
       }
@@ -196,6 +192,10 @@ namespace Vision
         for (unsigned int i = 0; i < m_args.host.size(); ++i)
         {
           host_name = m_args.host[0].c_str();
+        }
+        for (unsigned int i = 0; i < m_args.ipcam.size(); ++i)
+        {
+          ipcam_addresses = m_args.ipcam[0].c_str();
         }
       }
       
@@ -245,16 +245,16 @@ namespace Vision
         
         #if raspicam_on == 1
         config = (RASPIVID_CONFIG*)malloc(sizeof(RASPIVID_CONFIG));
-        inic_width = 320;
-        inic_height = 240;
-        config->width = inic_width;
-        config->height = inic_height;
+        inic_width = 160;
+        inic_height = 120;
+        config->width = 640;
+        config->height = 480;
         config->bitrate = 0; // zero: leave as default
-        config->framerate = 12;
+        //config->framerate = 20;
         config->monochrome = 0;
         #else
-        inic_width = 640;
-        inic_height = 480;
+        inic_width = 160;
+        inic_height = 120;
         #endif
       }
       
@@ -330,6 +330,9 @@ namespace Vision
       /* Save Video Frame Result */
       void save_video(IplImage* image, bool parameter)
       {
+        if (flag_stat_video == 0 && parameter == 1)
+        {
+          time_acquisition();
          #ifdef linux
           sprintf(local_dir,"mkdir /home/$USER/%d_%d_%d_log_video -p",day,mon,year);
           str_dir = system(local_dir);
@@ -366,7 +369,9 @@ namespace Vision
         cnt=0;
         while(cnt<value)
         {
+          #if raspicam_on == 0
           cvGrabFrame(capture);
+          #endif
           //frame = cvQueryFrame( capture );
           cnt++;
         }
@@ -380,10 +385,10 @@ namespace Vision
         #else
         //cvSetCaptureProperty( capture, 5, 8);
         //capture = cvCaptureFromFile("rtsp://10.0.20.207:554/live/ch00_0"); //for airvision mini SENS-11
-        //capture = cvCaptureFromCAM(0);//for laptop cam
+        capture = cvCaptureFromFile(ipcam_addresses);
         //capture = cvCaptureFromFile("http://10.0.20.102/axis-cgi/mjpg/video.cgi?resolution=320x240&.mjpg"); //for axis cam
         //capture = cvCaptureFromFile("http://10.0.3.31:8080/video.wmv"); //for stream video640x480
-        capture = cvCaptureFromFile("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Mobile");
+        //capture = cvCaptureFromFile("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Mobile");
         #endif
         
         while ( capture  == 0 && !stopping())
@@ -394,7 +399,8 @@ namespace Vision
           #else
           //cvSetCaptureProperty( capture, 5, 8);
           //capture = cvCaptureFromFile("http://10.0.20.102/axis-cgi/mjpg/video.cgi?resolution=320x240&.mjpg"); //for axis cam
-          capture = cvCaptureFromFile("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Mobile");
+          //capture = cvCaptureFromFile("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Mobile");
+          capture = cvCaptureFromFile(ipcam_addresses);
           #endif
           cnt++;
           waitForMessages(1.0);
@@ -442,7 +448,10 @@ namespace Vision
             t1=(double)cvGetTickCount();
             waitForMessages(0.01);
             #if raspicam_on == 1
+            while(flag_capture == 0 && !stopping());
+            flag_capture = 2;
             img = raspiCamCvQueryFrame(capture);
+            flag_capture = 1;
             cvReleaseImage( &frame );
             if (frame == 0 )
               frame = cvCreateImage ( cvSize(inic_width, inic_height), img -> depth, img -> nChannels);
@@ -509,7 +518,7 @@ namespace Vision
 
             cvReleaseImage(&zlib_data);
             #if raspicam_on == 1
-            save_video(frame,1);
+ //           save_video(frame,1);
             #endif
             t2=(double)cvGetTickCount();
             while(((t2-t1)/(cvGetTickFrequency()*1000.))<(1000/11))
@@ -519,26 +528,27 @@ namespace Vision
 
             //inf("Lat = %f   Lon = %f    Alt = %f", lat, lon, heig);
             //inf(" >>>>> time: %gms  fps: %.2g\n",(t2-t1)/(cvGetTickFrequency()*1000.), 1000./((t2-t1)/(cvGetTickFrequency()*1000.)));
-          
             //cvWaitKey(20);
           }
           if(!stopping())
           {
             close(sockfd);
             #if raspicam_on == 1
-            raspiCamCvReleaseCapture( &capture );
+            //raspiCamCvReleaseCapture( &capture );
             #else
             cvReleaseCapture(&capture);
             #endif
             inf("Restarting connection TCP-IP...");
             InicTCP(0);
             InicTCP(1);
+            #if raspicam_on == 0
             inic_Capture();
+            #endif
           }
         }
         #if raspicam_on == 1
         raspiCamCvReleaseCapture( &capture );
-        save_video(frame,0);
+//        save_video(frame,0);
         #else
         cvReleaseCapture(&capture);
         #endif
