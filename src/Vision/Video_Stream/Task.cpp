@@ -33,7 +33,7 @@
 #include <opencv2/opencv.hpp>
 
 //Enable(1) / disable(0) support for Raspicam
-#define raspicam_on 1
+#define raspicam_on 0
 
 //RaspiCAM headers
 #if raspicam_on == 1
