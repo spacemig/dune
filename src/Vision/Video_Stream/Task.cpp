@@ -224,7 +224,7 @@ namespace Vision
         //LAT and LON rad
         double lat_rad = msg->lat;
         double lon_rad = msg->lon;
-        heig = msg->height;
+        heig = (msg->height) - (msg->z);
         //LAT and LON rad
         //LAT and LON deg
         double lat_deg = lat_rad*(180/M_PI);
@@ -300,7 +300,7 @@ namespace Vision
           serv_addr.sin_port = htons(portno);
           while(connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0 && !stopping())
           {
-            waitForMessages(0);
+            waitForMessages(0.1);
           }
           inf("Connection TCP-IP ON");
         }
