@@ -61,7 +61,7 @@ namespace Vision
     struct Arguments
       {
         // - host name
-        std::vector<std::string> host;
+        std::vector<int> portno;
         // - IpCam
         std::vector<std::string> ipcam;
       };
@@ -133,8 +133,8 @@ namespace Vision
       //Save info of compress API
       int result;
       //!Variables TCP-IP Socket
-      int sockfd, portno, n;
-      struct sockaddr_in serv_addr;
+      int sockfd, newsockfd, portno, n;
+      struct sockaddr_in serv_addr, cli_addr;
       struct hostent *server;
       //Buffer of tcp sender
       char buffer[70];
@@ -161,9 +161,9 @@ namespace Vision
       Task(const std::string& name, Tasks::Context& ctx):
       DUNE::Tasks::Task(name, ctx)
       {
-        param("Host", m_args.host)
+        param("Port", m_args.portno)
           //.defaultValue("localhost")
-          .description("Name of the client in network");
+          .description("Port to use in TCP-IP");
 
         param("IpCam", m_args.ipcam)
           //.defaultValue("localhost")
@@ -189,10 +189,6 @@ namespace Vision
       void
       onEntityResolution(void)
       {
-        for (unsigned int i = 0; i < m_args.host.size(); ++i)
-        {
-          host_name = m_args.host[0].c_str();
-        }
         for (unsigned int i = 0; i < m_args.ipcam.size(); ++i)
         {
           ipcam_addresses = m_args.ipcam[0].c_str();
@@ -280,43 +276,73 @@ namespace Vision
       {
         if (!state)
         {
-          portno = 2424;
+          socklen_t clilen;
           sockfd = socket(AF_INET, SOCK_STREAM, 0);
           if (sockfd < 0)
           {
-            inf("ERROR opening socket");
-            exit(0);
+            inf("ERROR opening socket \"BLOCK\"");
+            while(1);
           }
-          server = gethostbyname(host_name);
-          if (server == NULL)
-          {
-            inf("ERROR, no such host");
-            exit(0);
-          }
-          inf("Wainting connection TCP-IP...");
+
           bzero((char *) &serv_addr, sizeof(serv_addr));
+          fcntl(sockfd, F_SETFL, O_NONBLOCK);
+          int one = 1; setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
           serv_addr.sin_family = AF_INET;
-          bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
-          serv_addr.sin_port = htons(portno);
-          while(connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0 && !stopping())
+          serv_addr.sin_addr.s_addr = INADDR_ANY;
+          serv_addr.sin_port = htons(m_args.portno[0]);
+
+          if (::bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
+              inf("ERROR on binding");
+
+          inf("Wainting connection TCP-IP...");
+          listen(sockfd,5);
+          
+          clilen = sizeof(cli_addr);
+          newsockfd = 0;
+          int counterTcp = 0;
+          while(newsockfd <= 0 && !stopping())
           {
-            waitForMessages(0.1);
+            newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
+            sleep(1);
+            counterTcp++;
+            if(counterTcp > 10)
+            {
+              close(sockfd);
+              sockfd = socket(AF_INET, SOCK_STREAM, 0);
+              if (sockfd < 0)
+              {
+                inf("ERROR opening socket");
+                exit(0);
+              }
+              fcntl(sockfd, F_SETFL, O_NONBLOCK);
+              setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+              if (::bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
+                inf("ERROR on binding");
+
+              listen(sockfd,5);
+              counterTcp = 0;
+              inf("Restarting TCP Socket");
+            }
           }
+            
           inf("Connection TCP-IP ON");
+
+          if(stopping())
+            return;
         }
         else
         {
           //Send info size image over tcp
           inf("Sending Data image info...");
           sprintf(buffer,"%d\n",frame_width);
-          n = send(sockfd, buffer, strlen(buffer), 0);
+          n = send(newsockfd, buffer, strlen(buffer), 0);
           if (n < 0)
           {
             inf("ERROR writing to socket: Image Size Width");
             exit(0);
           }
           sprintf(buffer,"%d\n",frame_height);
-          n = send(sockfd, buffer, strlen(buffer), 0);
+          n = send(newsockfd, buffer, strlen(buffer), 0);
           if (n < 0)
           {
             inf("ERROR writing to socket: Image Size Height");
@@ -436,11 +462,13 @@ namespace Vision
         //Initialize Values 
         InicValues();
         InicTCP(0);
-        
-        inic_Capture();
-                
+        if(stopping())
+            return;
+        inic_Capture();    
         InicTCP(1);
-        
+        if(stopping())
+            return;
+
         while (!stopping())
         {
           while(n >= 0 && !stopping())
@@ -477,7 +505,7 @@ namespace Vision
               inf("Compress error occured!");
             //send data size
             sprintf(buffer,"%ld\n",dsize);
-            n = send(sockfd, buffer, strlen(buffer), 0);
+            n = send(newsockfd, buffer, strlen(buffer), 0);
             if (n < 0)
               inf("ERROR writing to socket: Send Data Size Image");
 
@@ -487,7 +515,7 @@ namespace Vision
             while(ok_send == 0)
             {
               ///recv data for sync and debug
-              n = recv(sockfd, buffer, 20, 0);
+              n = recv(newsockfd, buffer, 20, 0);
               tam_ok = strlen(buffer);
               if (n <= 0)
                 inf("ERROR reading of socket");
@@ -506,13 +534,13 @@ namespace Vision
             }
 
             //send data image
-            n = send(sockfd, zlib_data->imageData, dsize, 0);
+            n = send(newsockfd, zlib_data->imageData, dsize, 0);
             //        printf("\nSend %d OK %d",n,dsize);
             if (n < 0)
               inf("ERROR writing to socket");
         
             sprintf(buffer,"(TCP) LAT: %f # LON: %f # ALT: %.2f m\n", lat, lon, heig);
-            n = send(sockfd, buffer, strlen(buffer), 0);
+            n = send(newsockfd, buffer, strlen(buffer), 0);
             if (n < 0)
               inf("ERROR writing to socket: Send Data GPS");
 
@@ -533,14 +561,19 @@ namespace Vision
           if(!stopping())
           {
             close(sockfd);
+            close(newsockfd);
             #if raspicam_on == 1
             //raspiCamCvReleaseCapture( &capture );
             #else
             cvReleaseCapture(&capture);
             #endif
-            inf("Restarting connection TCP-IP...");
+            inf("Restarting connection TCP-IP");
             InicTCP(0);
+            if(stopping())
+              break;
             InicTCP(1);
+            if(stopping())
+              break;
             #if raspicam_on == 0
             inic_Capture();
             #endif
@@ -553,6 +586,7 @@ namespace Vision
         cvReleaseCapture(&capture);
         #endif
         close(sockfd);
+        close(newsockfd);
       }
     };
   }
