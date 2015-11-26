@@ -70,7 +70,7 @@ namespace Vision
       //RaspiCam config
       RASPIVID_CONFIG * config;
       //Capture struct - OpenCV/RaspiCAM
-//      RaspiCamCvCapture* capture;
+      //RaspiCamCvCapture* capture;
       //Buffer for video frame
       CvVideoWriter *writer;
       //Define Font Letter OpenCV
@@ -204,7 +204,7 @@ namespace Vision
         flag_stat_video = 0;
         
         #if raspicam_on == 1
-/*        config = (RASPIVID_CONFIG*)malloc(sizeof(RASPIVID_CONFIG));
+        /*config = (RASPIVID_CONFIG*)malloc(sizeof(RASPIVID_CONFIG));
         inic_width = 1280;
         inic_height = 720;
         config->width = inic_width;
@@ -300,7 +300,6 @@ namespace Vision
           cnt++;
         }
         time_acquisition();
-        inf("Start... Hour: %d:%d:%d \t TASK: STREAM",hour,min,sec);
       }
 
       //! Main loop.
@@ -311,16 +310,10 @@ namespace Vision
         //Initialize Values
         InicValues();
         #if raspicam_on == 1
- //       capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
+        //capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
         //Font Opencv
         cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, 2, 2, 0, 2, 8);
         #else
-        //cvSetCaptureProperty( capture, 5, 16);
-        //capture = cvCaptureFromFile("rtsp://10.0.20.207:554/live/ch00_0"); //for airvision mini SENS-11
-        //capture = cvCaptureFromCAM(0);//for laptop cam
-        //capture = cvCaptureFromFile("rtsp://10.0.20.112:554/axis-media/media.amp"); //for axis cam
-        //capture = cvCaptureFromFile("http://10.0.20.112/axis-cgi/mjpg/video.cgi?resolution=1280x720&.mjpg"); //for axis cam
-        //capture_mat.open("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Bandwidth");
         capture_mat.open(ipcam_addresses);
         #endif
         
@@ -332,14 +325,10 @@ namespace Vision
         {
           
           #if raspicam_on == 1
-          inf("Waiting from task stream...");
-//          capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
+          war(DTR("Waiting from task stream");
+          //capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
           #else
-          inf("ERROR OPEN CAM");
-          //cvSetCaptureProperty( capture, 5, 16);
-          //capture = cvCaptureFromFile("rtsp://10.0.20.112:554/axis-media/media.amp"); //for axis cam
-          //capture = cvCaptureFromFile("http://10.0.20.112/axis-cgi/mjpg/video.cgi?resolution=1280x720&.mjpg"); //for axis cam
-          //capture_mat.open("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Bandwidth");
+          err(DTR("ERROR OPEN CAM"));
           capture_mat.open(ipcam_addresses);
           #endif
           cnt++;
@@ -355,27 +344,27 @@ namespace Vision
           //Capture Image
           #if raspicam_on == 1
           frame = raspiCamCvQueryFrame(capture);
-       /*   cvReleaseImage( &frame );
+          /*cvReleaseImage( &frame );
           if (frame == 0 )
             frame = cvCreateImage ( cvSize(inic_width, inic_height), img -> depth, img -> nChannels);
           cvResize(img, frame);*/
           //Size of Image capture
           frame_width = frame -> width;
           frame_height = frame -> height;
-          inf("Image Size: %d x %d\t TASK: SAVE",frame_width, frame_height);
+          inf(DTR("Image Size: %d x %d"), frame_width, frame_height);
           #else
           //frame = cvQueryFrame( capture );
           capture_mat >> frame;
           frame_height = frame.rows;
           frame_width = frame.cols;
-          inf("Image Size: %d x %d\t TASK: SAVE",frame_width, frame_height);
+          inf(DTR("Image Size: %d x %d"), frame_width, frame_height);
           clean_buffer(50);
           #endif
         }
         
         cnt=1;
         time_acquisition();
-        inf("Start... Hour: %d:%d:%d \t TASK: SAVE",hour,min,sec);
+        inf(DTR("Start Hour: %d:%d:%d"), hour, min, sec);
 
         while (!stopping())
         {
@@ -392,16 +381,15 @@ namespace Vision
           #if raspicam_on == 1
           if ( !capture )
           {
-            inf("ERROR GRAB IMAGE");
+            err(DTR("ERROR GRAB IMAGE"));
           }
           #else
           if ( !capture_mat.isOpened() )
           {
-            inf("ERROR GRAB IMAGE");
+            err(DTR("ERROR GRAB IMAGE"));
           } 
           #endif
           
-
           //Add information in frame result
           time_acquisition();
           #if raspicam_on == 1
@@ -432,7 +420,6 @@ namespace Vision
             t2=(double)cvGetTickCount();
           }
           //inf("\ntime: %gms  fps: %.2g\n",(t2-t1)/(cvGetTickFrequency()*1000.), 1000./((t2-t1)/(cvGetTickFrequency()*1000.)));
-        
           #endif
         }
         save_video( frame, 0);

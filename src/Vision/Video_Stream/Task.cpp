@@ -25,10 +25,6 @@
 // Author: Pedro Gonçalves                                                  *
 //***************************************************************************
 
-// ISO C++ 98 headers.
-#include <iostream>
-#include <pthread.h>
-
 //OpenCV headers
 #include <opencv2/opencv.hpp>
 
@@ -40,15 +36,12 @@
 //RaspiCAM headers
 #include "RaspiCamCV.h"
 RaspiCamCvCapture* capture;
-int flag_capture=0;
+int flag_capture = 0;
 #endif
 
 //ZLib headers
 #include <assert.h>
 #include <zlib.h>
-
-//TCP-IP extra headers
-#include <netdb.h>
 
 // DUNE headers.
 #include <DUNE/DUNE.hpp>
@@ -60,8 +53,8 @@ namespace Vision
     using DUNE_NAMESPACES;
     struct Arguments
       {
-        // - host name
-        std::vector<int> portno;
+        // - port number
+        unsigned portno;
         // - IpCam
         std::vector<std::string> ipcam;
       };
@@ -132,10 +125,6 @@ namespace Vision
       unsigned long dsize;
       //Save info of compress API
       int result;
-      //!Variables TCP-IP Socket
-      int sockfd, newsockfd, portno, n;
-      struct sockaddr_in serv_addr, cli_addr;
-      struct hostent *server;
       //Buffer of tcp sender
       char buffer[70];
       // Flag state for send data
@@ -154,12 +143,29 @@ namespace Vision
       double t1;
       //End Time - Save func.
       double t2;
+      // Socket handle.
+      TCPSocket* m_sock;
+      // I/O Multiplexer.
+      Poll m_poll;
+      // Clients.
+      std::list<TCPSocket*> m_clients;
+      //State of TCPsocket
+      int stateTcpIni;
       
+      // Client data.
+      struct Client
+      {
+        int size;       // size of data received.
+        char data[16];  // Data.
+      };
+      Client client_;
+
       //! Constructor.
       //! @param[in] name task name.
       //! @param[in] ctx context.
       Task(const std::string& name, Tasks::Context& ctx):
-      DUNE::Tasks::Task(name, ctx)
+      DUNE::Tasks::Task(name, ctx),
+      m_sock(NULL)
       {
         param("Port", m_args.portno)
           //.defaultValue("localhost")
@@ -199,20 +205,138 @@ namespace Vision
       void
       onResourceAcquisition(void)
       {
+        m_sock = new TCPSocket;
       }
       
       //! Initialize resources.
       void
       onResourceInitialization(void)
       {
+        m_sock->bind(m_args.portno);
+        m_sock->listen(5);
+        m_poll.add(*m_sock);
       }
       
       //! Release resources.
       void
       onResourceRelease(void)
       {
+        if (m_sock != NULL)
+        {
+          m_poll.remove(*m_sock);
+          delete m_sock;
+          m_sock = NULL;
+        }
+
+        std::list<TCPSocket*>::iterator itr = m_clients.begin();
+        for (; itr != m_clients.end(); ++itr)
+        {
+          m_poll.remove(*(*itr));
+          delete *itr;
+        }
+
+        m_clients.clear();
       }
       
+      void
+      dispatchToClients(const char* bfr, unsigned bfr_len)
+      {
+        std::list<TCPSocket*>::iterator itr = m_clients.begin();
+        while (itr != m_clients.end())
+        {
+          try
+          {
+            (*itr)->write(bfr, bfr_len);
+            ++itr;
+          }
+          catch (Network::ConnectionClosed& e)
+          {
+              err(DTR("Connection closed"));
+              client_.size = -1;
+              (void)e;
+              m_poll.remove(*(*itr));
+              delete *itr;
+              itr = m_clients.erase(itr);
+              continue;
+          }
+          catch (std::runtime_error& e)
+          {
+            client_.size = -1;
+            err("%s", e.what());
+            m_poll.remove(*(*itr));
+            delete *itr;
+            itr = m_clients.erase(itr);
+          }
+        }
+      }
+
+      void
+      checkMainSocket(void)
+      {
+        bool stateCom = false;
+        while(!stateCom)
+        {
+          if (m_poll.wasTriggered(*m_sock))
+          {
+            inf(DTR("accepting connection request"));
+            try
+            {
+              TCPSocket* nc = m_sock->accept();
+              m_clients.push_back(nc);
+              m_poll.add(*nc);
+              stateCom = true;
+            }
+            catch (std::runtime_error& e)
+            {
+              err("%s", e.what());
+            }
+          }
+        }
+      }
+
+      Client
+      checkClientSockets(void)
+      {
+        Client  bfr;
+        memset(bfr.data, '\0', sizeof(bfr.data));
+
+        std::list<TCPSocket*>::iterator itr = m_clients.begin();
+        while (itr != m_clients.end())
+        {
+          if (!m_poll.poll(1.0))
+          {
+            err("time out while waiting for reply");
+            bfr.size = -1;
+          }
+          if (m_poll.wasTriggered(*(*itr)))
+          {
+            try
+            {
+              bfr.size = (*itr)->read(bfr.data, sizeof(bfr.data));
+              //inf("Valor recebido: %s  |  size: %d", bfr.data, bfr.size);
+            }
+            catch (Network::ConnectionClosed& e)
+            {
+              err(DTR("Connection closed"));
+              bfr.size = -1;
+              (void)e;
+              m_poll.remove(*(*itr));
+              delete *itr;
+              itr = m_clients.erase(itr);
+              continue;
+            }
+            catch (std::runtime_error& e)
+            {
+              err("%s", e.what());
+              bfr.size = -1;
+            }
+          }
+
+          ++itr;
+        }
+        return bfr;
+      }
+
       void
       consume(const IMC::EstimatedState* msg)
       {
@@ -237,6 +361,8 @@ namespace Vision
       void 
       InicValues(void)
       {
+        stateTcpIni = 0;
+        client_.size = 0;
         flag_stat_video = 0;
         
         #if raspicam_on == 1
@@ -276,79 +402,29 @@ namespace Vision
       {
         if (!state)
         {
-          socklen_t clilen;
-          sockfd = socket(AF_INET, SOCK_STREAM, 0);
-          if (sockfd < 0)
+          inf(DTR("Waiting from client"));
+          while(stateTcpIni == 0 && !stopping())
           {
-            inf("ERROR opening socket \"BLOCK\"");
-            while(1);
-          }
-
-          bzero((char *) &serv_addr, sizeof(serv_addr));
-          fcntl(sockfd, F_SETFL, O_NONBLOCK);
-          int one = 1; setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-          serv_addr.sin_family = AF_INET;
-          serv_addr.sin_addr.s_addr = INADDR_ANY;
-          serv_addr.sin_port = htons(m_args.portno[0]);
-
-          if (::bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
-              inf("ERROR on binding");
-
-          inf("Wainting connection TCP-IP...");
-          listen(sockfd,5);
-          
-          clilen = sizeof(cli_addr);
-          newsockfd = 0;
-          int counterTcp = 0;
-          while(newsockfd <= 0 && !stopping())
-          {
-            newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-            sleep(1);
-            counterTcp++;
-            if(counterTcp > 10)
+            if (m_poll.poll(0.01) && stateTcpIni == 0)
             {
-              close(sockfd);
-              sockfd = socket(AF_INET, SOCK_STREAM, 0);
-              if (sockfd < 0)
-              {
-                inf("ERROR opening socket");
-                exit(0);
-              }
-              fcntl(sockfd, F_SETFL, O_NONBLOCK);
-              setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-              if (::bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
-                inf("ERROR on binding");
-
-              listen(sockfd,5);
-              counterTcp = 0;
-              inf("Restarting TCP Socket");
+              checkMainSocket();
+              stateTcpIni = 1;
             }
           }
-            
-          inf("Connection TCP-IP ON");
-
-          if(stopping())
-            return;
+          inf(DTR("Connection TCP-IP ON"));
         }
         else
         {
           //Send info size image over tcp
-          inf("Sending Data image info...");
+          inf(DTR("Sending Data image info"));
           sprintf(buffer,"%d\n",frame_width);
-          n = send(newsockfd, buffer, strlen(buffer), 0);
-          if (n < 0)
-          {
-            inf("ERROR writing to socket: Image Size Width");
-            exit(0);
-          }
+          dispatchToClients(buffer, strlen(buffer));
+          
           sprintf(buffer,"%d\n",frame_height);
-          n = send(newsockfd, buffer, strlen(buffer), 0);
-          if (n < 0)
-          {
-            inf("ERROR writing to socket: Image Size Height");
-            exit(0);
-          }
-          inf("Sending Data image info Done (%d x %d) ...",frame_width, frame_height);
+          dispatchToClients(buffer, strlen(buffer));
+
+          inf(DTR("Image Size: %dx%d"), frame_width, frame_height);
+          stateTcpIni = 0;
         }
       }
       
@@ -409,23 +485,15 @@ namespace Vision
         #if raspicam_on == 1
         capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
         #else
-        //cvSetCaptureProperty( capture, 5, 8);
-        //capture = cvCaptureFromFile("rtsp://10.0.20.207:554/live/ch00_0"); //for airvision mini SENS-11
         capture = cvCaptureFromFile(ipcam_addresses);
-        //capture = cvCaptureFromFile("http://10.0.20.102/axis-cgi/mjpg/video.cgi?resolution=320x240&.mjpg"); //for axis cam
-        //capture = cvCaptureFromFile("http://10.0.3.31:8080/video.wmv"); //for stream video640x480
-        //capture = cvCaptureFromFile("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Mobile");
         #endif
         
         while ( capture  == 0 && !stopping())
         {
-          inf("ERROR OPEN CAM\n");
+          err(DTR("ERROR OPEN CAM\n"));
           #if raspicam_on == 1
           capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
           #else
-          //cvSetCaptureProperty( capture, 5, 8);
-          //capture = cvCaptureFromFile("http://10.0.20.102/axis-cgi/mjpg/video.cgi?resolution=320x240&.mjpg"); //for axis cam
-          //capture = cvCaptureFromFile("rtsp://10.0.20.102:554/axis-media/media.amp?streamprofile=Mobile");
           capture = cvCaptureFromFile(ipcam_addresses);
           #endif
           cnt++;
@@ -450,28 +518,23 @@ namespace Vision
           //Size of Image capture
           frame_width = frame -> width;
           frame_height = frame -> height;
-          inf("Image Size: %d x %d \t TASK: STREAM",frame_width, frame_height);
+          //inf("Image Size: %d x %d \t TASK: STREAM",frame_width, frame_height);
         }
       }
       //! Main loop.
       void
       onMain(void)
       {
-        //inf("\n >>>>  Nome : %s  <<<< \n\n",m_args.host[0].c_str());
-        //IMC::EstimatedState msg;
-        //Initialize Values 
         InicValues();
         InicTCP(0);
-        if(stopping())
-            return;
         inic_Capture();    
         InicTCP(1);
-        if(stopping())
-            return;
-
+        #if raspicam_on == 1
+        flag_capture = 2;
+        #endif
         while (!stopping())
         {
-          while(n >= 0 && !stopping())
+          while(client_.size >= 0 && !stopping())
           {
             t1=(double)cvGetTickCount();
             waitForMessages(0.01);
@@ -490,24 +553,23 @@ namespace Vision
             
             if ( !capture )
             {
-              inf("ERROR GRAB IMAGE");
+              err(DTR("ERROR GRAB IMAGE"));
             }            
        
             if (zlib_data == NULL)
               zlib_data = cvCreateImage(cvGetSize(frame),8,3);
-            
+
             dsize = frame->imageSize + (frame->imageSize * 0.1f) + 20;
-            
             result = compress2((unsigned char *)zlib_data->imageData, &dsize, (const unsigned char 
             *)frame->imageData, frame->imageSize, 5);
        
             if(result != Z_OK)
-              inf("Compress error occured!");
+              err(DTR("Compress error occured!"));
             //send data size
             sprintf(buffer,"%ld\n",dsize);
-            n = send(newsockfd, buffer, strlen(buffer), 0);
-            if (n < 0)
-              inf("ERROR writing to socket: Send Data Size Image");
+            dispatchToClients(buffer, strlen(buffer));
+            if(client_.size == -1)
+              break;
 
             ok_send = 0;
             tam_ok=0;
@@ -515,65 +577,51 @@ namespace Vision
             while(ok_send == 0)
             {
               ///recv data for sync and debug
-              n = recv(newsockfd, buffer, 20, 0);
-              tam_ok = strlen(buffer);
-              if (n <= 0)
-                inf("ERROR reading of socket");
-              
+              client_ = checkClientSockets();
+              if (client_.size == -1)
+                err(DTR("ERROR reading of socket"));
+              tam_ok = strlen(client_.data);
               if(tam_ok == 1)
               {    
-                ok_send = atoi(buffer);
+                ok_send = atoi(client_.data);
               }
               
               cnt_refresh_sync++;
-              if (cnt_refresh_sync > 6)
-              {
+              if (cnt_refresh_sync > 4)
                 ok_send = 1;
-                //inf("\nRefresh Sync...\n");
-              }
             }
 
             //send data image
-            n = send(newsockfd, zlib_data->imageData, dsize, 0);
-            //        printf("\nSend %d OK %d",n,dsize);
-            if (n < 0)
-              inf("ERROR writing to socket");
-        
+            dispatchToClients(zlib_data->imageData, dsize);
+            if(client_.size == -1)
+              break;
+
             sprintf(buffer,"(TCP) LAT: %f # LON: %f # ALT: %.2f m\n", lat, lon, heig);
-            n = send(newsockfd, buffer, strlen(buffer), 0);
-            if (n < 0)
-              inf("ERROR writing to socket: Send Data GPS");
+            dispatchToClients(buffer, strlen(buffer));
+            if(client_.size == -1)
+              break;
 
             cvReleaseImage(&zlib_data);
             #if raspicam_on == 1
- //           save_video(frame,1);
+            //save_video(frame,1);
             #endif
             t2=(double)cvGetTickCount();
             while(((t2-t1)/(cvGetTickFrequency()*1000.))<(1000/11))
             {
               t2=(double)cvGetTickCount();
             }
-
-            //inf("Lat = %f   Lon = %f    Alt = %f", lat, lon, heig);
-            //inf(" >>>>> time: %gms  fps: %.2g\n",(t2-t1)/(cvGetTickFrequency()*1000.), 1000./((t2-t1)/(cvGetTickFrequency()*1000.)));
-            //cvWaitKey(20);
           }
           if(!stopping())
           {
-            close(sockfd);
-            close(newsockfd);
             #if raspicam_on == 1
             //raspiCamCvReleaseCapture( &capture );
             #else
             cvReleaseCapture(&capture);
             #endif
-            inf("Restarting connection TCP-IP");
+            war(DTR("Restarting connection TCP-IP"));
             InicTCP(0);
-            if(stopping())
-              break;
             InicTCP(1);
-            if(stopping())
-              break;
+            client_.size = 0;
             #if raspicam_on == 0
             inic_Capture();
             #endif
@@ -585,8 +633,6 @@ namespace Vision
         #else
         cvReleaseCapture(&capture);
         #endif
-        close(sockfd);
-        close(newsockfd);
       }
     };
   }
