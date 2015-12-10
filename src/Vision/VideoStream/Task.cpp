@@ -25,14 +25,14 @@
 // Author: Pedro Gonçalves                                                  *
 //***************************************************************************
 
+// DUNE headers.
+#include <DUNE/Config.hpp>
+
 //OpenCV headers
 #include <opencv2/opencv.hpp>
 
 //Enable(1) / disable(0) support for Raspicam
-#define raspicam_on 0
-
-//RaspiCAM headers
-#if raspicam_on == 1
+#if defined(DUNE_USING_RASPICAMCV)
 //RaspiCAM headers
 #include "RaspiCamCV.h"
 RaspiCamCvCapture* capture;
@@ -48,7 +48,7 @@ int flag_capture = 0;
 
 namespace Vision
 {
-  namespace Video_Stream
+  namespace VideoStream
   {
     using DUNE_NAMESPACES;
     struct Arguments
@@ -62,7 +62,7 @@ namespace Vision
     {
       Arguments m_args;
       //!Variables
-      #if raspicam_on == 1
+      #if defined(DUNE_USING_RASPICAMCV)
       //RaspiCam config
       RASPIVID_CONFIG * config;
       //Capture struct - OpenCV/RaspiCAM
@@ -134,11 +134,11 @@ namespace Vision
       //Counter for refresh sync
       int cnt_refresh_sync;
       //Latitude
-      float lat;
+      double lat;
       //Longitude
-      float lon;
+      double lon;
       //Height
-      float heig;
+      double heig;
       //Start Time - Save func.
       double t1;
       //End Time - Save func.
@@ -342,19 +342,19 @@ namespace Vision
       {
         //! update the position of vehicle
         //LAT and LON rad
-        double lat_rad = msg->lat;
-        double lon_rad = msg->lon;
+        double latRad = msg->lat;
+        double lonRad = msg->lon;
         heig = (msg->height) - (msg->z);
         //LAT and LON rad
         //LAT and LON deg
-        double lat_deg = lat_rad*(180/M_PI);
-        double lon_deg = lon_rad*(180/M_PI);
+        double latDeg = DUNE::Math::Angles::degrees(latRad);
+        double lonDeg = DUNE::Math::Angles::degrees(lonRad);
         //Offset (m)
-        double offset_n = msg->x;
-        double offset_e = msg->y;
+        double offsetN = msg->x;
+        double offsetE = msg->y;
         //Lat and Lon final
-        lat = lat_deg + (180/M_PI)*(offset_e/6378137);
-        lon = lon_deg + (180/M_PI)*(offset_n/6378137)/cos(lat_deg);
+        lat = latDeg + (180/M_PI)*(offsetE/6378137);
+        lon = lonDeg + (180/M_PI)*(offsetN/6378137)/cos(latDeg);
         //inf("Lat = %f   Lon = %f", lat, lon);
       }
       //! Initialize Values
@@ -428,7 +428,7 @@ namespace Vision
         }
       }
       
-      #if raspicam_on == 1
+      #if defined(DUNE_USING_RASPICAMCV)
       /* Save Video Frame Result */
       void save_video(IplImage* image, bool parameter)
       {
@@ -471,10 +471,11 @@ namespace Vision
         cnt=0;
         while(cnt<value)
         {
-          #if raspicam_on == 0
+          #if defined(DUNE_USING_RASPICAMCV)
+          //frame = cvQueryFrame( capture );
+          #else
           cvGrabFrame(capture);
           #endif
-          //frame = cvQueryFrame( capture );
           cnt++;
         }
       }
@@ -482,7 +483,7 @@ namespace Vision
       void
       inic_Capture(void)
       {
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
         capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
         #else
         capture = cvCaptureFromFile(ipcam_addresses);
@@ -491,7 +492,7 @@ namespace Vision
         while ( capture  == 0 && !stopping())
         {
           err(DTR("ERROR OPEN CAM\n"));
-          #if raspicam_on == 1
+          #if defined(DUNE_USING_RASPICAMCV)
           capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
           #else
           capture = cvCaptureFromFile(ipcam_addresses);
@@ -503,7 +504,7 @@ namespace Vision
         if ( capture )
         {
           //Capture Image
-          #if raspicam_on == 1
+          #if defined(DUNE_USING_RASPICAMCV)
           img = raspiCamCvQueryFrame(capture);
           cvReleaseImage( &frame );
           if (frame == 0 )
@@ -529,7 +530,7 @@ namespace Vision
         InicTCP(0);
         inic_Capture();    
         InicTCP(1);
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
         flag_capture = 2;
         #endif
         while (!stopping())
@@ -538,7 +539,7 @@ namespace Vision
           {
             t1=(double)cvGetTickCount();
             waitForMessages(0.01);
-            #if raspicam_on == 1
+            #if defined(DUNE_USING_RASPICAMCV)
             while(flag_capture == 0 && !stopping());
             flag_capture = 2;
             img = raspiCamCvQueryFrame(capture);
@@ -602,7 +603,7 @@ namespace Vision
               break;
 
             cvReleaseImage(&zlib_data);
-            #if raspicam_on == 1
+            #if defined(DUNE_USING_RASPICAMCV)
             //save_video(frame,1);
             #endif
             t2=(double)cvGetTickCount();
@@ -613,7 +614,7 @@ namespace Vision
           }
           if(!stopping())
           {
-            #if raspicam_on == 1
+            #if defined(DUNE_USING_RASPICAMCV)
             //raspiCamCvReleaseCapture( &capture );
             #else
             cvReleaseCapture(&capture);
@@ -622,12 +623,14 @@ namespace Vision
             InicTCP(0);
             InicTCP(1);
             client_.size = 0;
-            #if raspicam_on == 0
+            #if defined(DUNE_USING_RASPICAMCV)
+            //inic_Capture();
+            #else
             inic_Capture();
             #endif
           }
         }
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
         raspiCamCvReleaseCapture( &capture );
 //        save_video(frame,0);
         #else

@@ -28,15 +28,14 @@
 // ISO C++ 98 headers.
 #include <iostream>
 
+// DUNE headers.
+#include <DUNE/Config.hpp>
+
 //OpenCV headers
 #include <opencv2/opencv.hpp>
 
 //Enable(1) / disable(0) support for Raspicam
-#define raspicam_on 0
-
-//RaspiCAM headers
-#if raspicam_on == 1
-//RaspiCAM headers
+#if defined(DUNE_USING_RASPICAMCV)
 #include "RaspiCamCV.h"
 extern RaspiCamCvCapture* capture;
 extern int flag_capture;
@@ -54,7 +53,7 @@ extern int flag_capture;
 
 namespace Vision
 {
-  namespace Video_Save
+  namespace VideoSave
   {
     using DUNE_NAMESPACES;
     struct Arguments
@@ -66,7 +65,7 @@ namespace Vision
     {
       Arguments m_args;
       //!Variables
-      #if raspicam_on == 1
+      #if defined(DUNE_USING_RASPICAMCV)
       //RaspiCam config
       RASPIVID_CONFIG * config;
       //Capture struct - OpenCV/RaspiCAM
@@ -153,8 +152,6 @@ namespace Vision
         param("IpCam", m_args.ipcam)
           //.defaultValue("localhost")
           .description("IpCam Addresses");
-        
-        //bind<IMC::Tracking>(this);
       }
       
       //! Update internal state with new parameter values.
@@ -203,7 +200,7 @@ namespace Vision
       {
         flag_stat_video = 0;
         
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
         /*config = (RASPIVID_CONFIG*)malloc(sizeof(RASPIVID_CONFIG));
         inic_width = 1280;
         inic_height = 720;
@@ -219,7 +216,7 @@ namespace Vision
       }
       
       /* Save Video Frame Result */
-      #if raspicam_on == 1
+      #if defined(DUNE_USING_RASPICAMCV)
       void save_video(IplImage* image, bool parameter)
       #else
       void save_video(cv::Mat image, bool parameter)
@@ -243,7 +240,7 @@ namespace Vision
           sprintf(text,"%s\%d_%d_%d___%d_%d_%d.avi",local_dir,hour,min,sec,day,mon,year);
           #endif
           
-          #if raspicam_on == 1
+          #if defined(DUNE_USING_RASPICAMCV)
           writer = cvCreateVideoWriter(text, CV_FOURCC('D','I','V','X'), 10, cvGetSize(image), 1);
           #else
           frame_height = image.rows;
@@ -255,14 +252,14 @@ namespace Vision
         }
         
         if (flag_stat_video == 1 && parameter == 1)
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
           cvWriteFrame(writer, image);      // add the frame to the file
         #else
           output_cap.write(image);      // add the frame to the file
         #endif
         else if (flag_stat_video == 1 && parameter == 0)
         {
-          #if raspicam_on == 1
+          #if defined(DUNE_USING_RASPICAMCV)
           cvReleaseVideoWriter( &writer );
           #else
           output_cap.release();
@@ -293,10 +290,11 @@ namespace Vision
         cnt=0;
         while(cnt<value)
         {
-          #if raspicam_on == 0
+          #if defined(DUNE_USING_RASPICAMCV)
+          //frame = cvQueryFrame( capture );
+          #else
           capture_mat >> frame;
           #endif
-          //frame = cvQueryFrame( capture );
           cnt++;
         }
         time_acquisition();
@@ -306,10 +304,9 @@ namespace Vision
       void
       onMain(void)
       {        
-        //IMC::CompressedImage msg;
         //Initialize Values
         InicValues();
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
         //capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
         //Font Opencv
         cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, 2, 2, 0, 2, 8);
@@ -317,15 +314,15 @@ namespace Vision
         capture_mat.open(ipcam_addresses);
         #endif
         
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
         while ( capture == 0 && !stopping())
         #else
         while ( !capture_mat.isOpened() && !stopping())
         #endif 
         {
           
-          #if raspicam_on == 1
-          war(DTR("Waiting from task stream");
+          #if defined(DUNE_USING_RASPICAMCV)
+          war(DTR("Waiting from task stream"));
           //capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
           #else
           err(DTR("ERROR OPEN CAM"));
@@ -335,14 +332,14 @@ namespace Vision
           waitForMessages(1.0);
         }
         
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
         if ( capture )
         #else
         if ( capture_mat.isOpened() )
         #endif 
         {
           //Capture Image
-          #if raspicam_on == 1
+          #if defined(DUNE_USING_RASPICAMCV)
           frame = raspiCamCvQueryFrame(capture);
           /*cvReleaseImage( &frame );
           if (frame == 0 )
@@ -369,7 +366,7 @@ namespace Vision
         while (!stopping())
         {
           t1=(double)cvGetTickCount();
-          #if raspicam_on == 1
+          #if defined(DUNE_USING_RASPICAMCV)
           while(flag_capture == 2 && !stopping());
           flag_capture = 0;
           frame = raspiCamCvQueryFrame(capture);
@@ -378,7 +375,7 @@ namespace Vision
           capture_mat >> frame;
           #endif
           
-          #if raspicam_on == 1
+          #if defined(DUNE_USING_RASPICAMCV)
           if ( !capture )
           {
             err(DTR("ERROR GRAB IMAGE"));
@@ -392,7 +389,7 @@ namespace Vision
           
           //Add information in frame result
           time_acquisition();
-          #if raspicam_on == 1
+          #if defined(DUNE_USING_RASPICAMCV)
           sprintf(text,"Hour: %d:%d:%d",hour,min,sec);
           cvPutText(frame, text, cvPoint(10, 20), &font, cvScalar(20, 90, 250, 0));
           sprintf(text,"Data: %d/%d/%d",day,mon,year);
@@ -424,7 +421,7 @@ namespace Vision
         }
         save_video( frame, 0);
         //cvDestroyWindow( "Live Video" );
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
         //raspiCamCvReleaseCapture( &capture );
         #else
         capture_mat.release();

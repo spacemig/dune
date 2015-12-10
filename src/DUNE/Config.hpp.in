@@ -73,6 +73,8 @@
 #cmakedefine DUNE_USING_XENETH
 //! DUNE was compiled with support for the Exif library.
 #cmakedefine DUNE_USING_EXIF
+//! DUNE was compiled with support for the RasPiCam lib.
+#cmakedefine DUNE_USING_RASPICAMCV
 
 //! Defined on Microsoft Windows.
 #cmakedefine DUNE_OS_WINDOWS
