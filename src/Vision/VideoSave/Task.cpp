@@ -37,8 +37,8 @@
 //Enable(1) / disable(0) support for Raspicam
 #if defined(DUNE_USING_RASPICAMCV)
 #include "RaspiCamCV.h"
-extern RaspiCamCvCapture* capture;
-extern int flag_capture;
+extern RaspiCamCvCapture* m_capture;
+extern int m_flag_capture;
 #endif
 
 //ZLib headers
@@ -57,91 +57,92 @@ namespace Vision
   {
     using DUNE_NAMESPACES;
     struct Arguments
-      {
-        // - IpCam
-        std::vector<std::string> ipcam;
-      };
+    {
+      // - IpCam
+      std::vector<std::string> ipcam;
+    };
+
     struct Task: public DUNE::Tasks::Task
     {
       Arguments m_args;
       //!Variables
       #if defined(DUNE_USING_RASPICAMCV)
       //RaspiCam config
-      RASPIVID_CONFIG * config;
+      RASPIVID_CONFIG * m_config;
       //Capture struct - OpenCV/RaspiCAM
       //RaspiCamCvCapture* capture;
       //Buffer for video frame
-      CvVideoWriter *writer;
+      CvVideoWriter *m_writer;
       //Define Font Letter OpenCV
-      CvFont font;
+      CvFont m_font;
       //IplImage main
-      IplImage* frame;
+      IplImage* m_frame;
       #else
       //cv::Mat main frame
-      cv::Mat frame;
+      cv::Mat m_frame;
       //Buffer for video frame
-      cv::VideoWriter output_cap;
+      cv::VideoWriter m_output_cap;
       //Capture struct - OpenCV
-      cv::VideoCapture capture_mat;
+      cv::VideoCapture m_capture_mat;
       #endif
       //Read time and data
-      struct tm* local;
+      struct tm* m_local;
       //Main frame width
-      int frame_width;
+      int m_frame_width;
       //Main frame height
-      int frame_height;
+      int m_frame_height;
       //width Inic
-      int inic_width;
+      int m_inic_width;
       //height Inic
-      int inic_height;
+      int m_inic_height;
       //Buffer text for frame result
-      char text[80];
+      char m_text[80];
       //Buffer text for directory for log
-      char local_dir[80];
+      char m_local_dir[80];
       //Result of search local dir
-      int str_dir;
+      int m_str_dir;
       //User Name
-      const char* user_name;
+      const char* m_user_name;
       //IpCam Addresses
-      const char* ipcam_addresses;
+      const char* m_ipcam_addresses;
       //Global counter
-      int cnt;
+      int m_cnt;
       //Flag - stat of video record
-      bool flag_stat_video;
+      bool m_flag_stat_video;
       //Flag - start record
       //!Variables Time
       //Hour
-      int hour;
+      int m_hour;
       //Minute
-      int min;
+      int m_min;
       //Second
-      int sec;
+      int m_sec;
       //Day
-      int day;
+      int m_day;
       //Month
-      int mon;
+      int m_mon;
       //Year
-      int year;
+      int m_year;
       //Size of compress image
-      unsigned long dsize;
+      unsigned long m_dsize;
       //Save info of compress API
-      int result;
+      int m_result;
       //!Variables TCP-IP Socket
-      int sockfd, portno, n;
-      struct sockaddr_in serv_addr;
-      struct hostent *server;
+      int m_sockfd, m_portno, m_n;
+      struct sockaddr_in m_serv_addr;
+      struct hostent *m_server;
       //Buffer of tcp sender
-      char buffer[30];
+      char m_buffer[30];
       // Flag state for send data
-      bool ok_send;
+      bool m_ok_send;
       //Size of data received
-      int tam_ok;
+      int m_tam_ok;
       //Counter for refresh sync
-      int cnt_refresh_sync;
+      int m_cnt_refresh_sync;
       //Start Time - Save func.
-      double t1;
+      double m_t1;
       //End Time - Save func.
-      double t2;
+      double m_t2;
       
       //! Constructor.
       //! @param[in] name task name.
@@ -172,7 +173,7 @@ namespace Vision
       {
         for (unsigned int i = 0; i < m_args.ipcam.size(); ++i)
         {
-          ipcam_addresses = m_args.ipcam[0].c_str();
+          m_ipcam_addresses = m_args.ipcam[0].c_str();
         }
       }
       
@@ -196,9 +197,9 @@ namespace Vision
       
       //! Initialize Values
       void 
-      InicValues(void)
+      inicValues(void)
       {
-        flag_stat_video = 0;
+        m_flag_stat_video = 0;
         
         #if defined(DUNE_USING_RASPICAMCV)
         /*config = (RASPIVID_CONFIG*)malloc(sizeof(RASPIVID_CONFIG));
@@ -210,94 +211,94 @@ namespace Vision
         config->framerate = 12;
         config->monochrome = 0;*/
         #else
-        inic_width = 640;
-        inic_height = 480;
+        m_inic_width = 640;
+        m_inic_height = 480;
         #endif
       }
       
       /* Save Video Frame Result */
       #if defined(DUNE_USING_RASPICAMCV)
-      void save_video(IplImage* image, bool parameter)
+      void saveVideo(IplImage* image, bool parameter)
       #else
-      void save_video(cv::Mat image, bool parameter)
+      void saveVideo(cv::Mat image, bool parameter)
       #endif
       {
-        if (flag_stat_video == 0 && parameter == 1)
+        if (m_flag_stat_video == 0 && parameter == 1)
         {
           #ifdef linux
-          sprintf(local_dir,"mkdir /home/$USER/%d_%d_%d_log_video -p",day,mon,year);
-          str_dir = system(local_dir);
-          user_name = getenv ("USER");
-          sprintf(local_dir,"/home/%s/%d_%d_%d_log_video", user_name, day, mon, year);
-          sprintf(text,"%s/%d_%d_%d___%d_%d_%d.avi",local_dir,hour,min,sec,day,mon,year);
+          sprintf(m_local_dir,"mkdir /home/$USER/%d_%d_%d_log_video -p",m_day,m_mon,m_year);
+          m_str_dir = system(m_local_dir);
+          m_user_name = getenv ("USER");
+          sprintf(m_local_dir,"/home/%s/%d_%d_%d_log_video", m_user_name, m_day, m_mon, m_year);
+          sprintf(m_text,"%s/%d_%d_%d___%d_%d_%d.avi",m_local_dir, m_hour, m_min, m_sec, m_day, m_mon, m_year);
           #endif
           
           #ifdef _WIN32
-          str_dir = system("cd C:\ ");
-          sprintf(local_dir,"mkdir %d_%d_%d_log_video",day,mon,year);
-          str_dir = system(local_dir);
-          sprintf(local_dir,"C:\%d_%d_%d_log_video",day,mon,year);
-          sprintf(text,"%s\%d_%d_%d___%d_%d_%d.avi",local_dir,hour,min,sec,day,mon,year);
+          m_str_dir = system("cd C:\ ");
+          sprintf(m_local_dir,"mkdir %d_%d_%d_log_video",m_day, m_mon, m_year);
+          m_str_dir = system(m_local_dir);
+          sprintf(m_local_dir,"C:\%d_%d_%d_log_video",m_day, m_mon, m_year);
+          sprintf(m_text,"%s\%d_%d_%d___%d_%d_%d.avi",m_local_dir, m_hour, m_min, m_sec, m_day, m_mon, m_year);
           #endif
           
           #if defined(DUNE_USING_RASPICAMCV)
-          writer = cvCreateVideoWriter(text, CV_FOURCC('D','I','V','X'), 10, cvGetSize(image), 1);
+          m_writer = cvCreateVideoWriter(m_text, CV_FOURCC('D','I','V','X'), 10, cvGetSize(image), 1);
           #else
-          frame_height = image.rows;
-          frame_width = image.cols;
-          output_cap = cv::VideoWriter(text, CV_FOURCC('X', 'V', 'I', 'D'), 10, cvSize(frame_width, frame_height), 1);
+          m_frame_height = image.rows;
+          m_frame_width = image.cols;
+          m_output_cap = cv::VideoWriter(m_text, CV_FOURCC('X', 'V', 'I', 'D'), 10, cvSize(m_frame_width, m_frame_height), 1);
           #endif
-          flag_stat_video = 1;
+          m_flag_stat_video = 1;
 
         }
         
-        if (flag_stat_video == 1 && parameter == 1)
+        if (m_flag_stat_video == 1 && parameter == 1)
         #if defined(DUNE_USING_RASPICAMCV)
-          cvWriteFrame(writer, image);      // add the frame to the file
+          cvWriteFrame(m_writer, image);      // add the frame to the file
         #else
-          output_cap.write(image);      // add the frame to the file
+          m_output_cap.write(image);      // add the frame to the file
         #endif
-        else if (flag_stat_video == 1 && parameter == 0)
+        else if (m_flag_stat_video == 1 && parameter == 0)
         {
           #if defined(DUNE_USING_RASPICAMCV)
-          cvReleaseVideoWriter( &writer );
+          cvReleaseVideoWriter( &m_writer );
           #else
-          output_cap.release();
+          m_output_cap.release();
           #endif
-          flag_stat_video = 0;
+          m_flag_stat_video = 0;
         }
       }
       
       /*Time acquisition */
       void
-      time_acquisition(void)
+      timeAcquisition(void)
       {
         time_t t;
         t = time(NULL);
-        local = localtime(&t);
+        m_local = localtime(&t);
         
-        hour = local -> tm_hour;
-        min = local -> tm_min;
-        sec = local -> tm_sec;
-        day = local -> tm_mday;
-        mon = local -> tm_mon + 1;
-        year = local -> tm_year + 1900;
+        m_hour = m_local -> tm_hour;
+        m_min = m_local -> tm_min;
+        m_sec = m_local -> tm_sec;
+        m_day = m_local -> tm_mday;
+        m_mon = m_local -> tm_mon + 1;
+        m_year = m_local -> tm_year + 1900;
       }
       
       void
-      clean_buffer(int value)
+      cleanBuffer(int value)
       {
-        cnt=0;
-        while(cnt<value)
+        m_cnt=0;
+        while(m_cnt < value)
         {
           #if defined(DUNE_USING_RASPICAMCV)
           //frame = cvQueryFrame( capture );
           #else
-          capture_mat >> frame;
+          m_capture_mat >> m_frame;
           #endif
-          cnt++;
+          m_cnt++;
         }
-        time_acquisition();
+        timeAcquisition();
       }
 
       //! Main loop.
@@ -305,126 +306,125 @@ namespace Vision
       onMain(void)
       {        
         //Initialize Values
-        InicValues();
+        inicValues();
         #if defined(DUNE_USING_RASPICAMCV)
         //capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
         //Font Opencv
-        cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, 2, 2, 0, 2, 8);
+        cvInitFont(&m_font, CV_FONT_HERSHEY_PLAIN, 2, 2, 0, 2, 8);
         #else
-        capture_mat.open(ipcam_addresses);
+        m_capture_mat.open(m_ipcam_addresses);
         #endif
         
         #if defined(DUNE_USING_RASPICAMCV)
-        while ( capture == 0 && !stopping())
+        while ( m_capture == 0 && !stopping())
         #else
-        while ( !capture_mat.isOpened() && !stopping())
+        while ( !m_capture_mat.isOpened() && !stopping())
         #endif 
         {
-          
           #if defined(DUNE_USING_RASPICAMCV)
           war(DTR("Waiting from task stream"));
           //capture = (RaspiCamCvCapture *) raspiCamCvCreateCameraCapture2(0, config);
           #else
           err(DTR("ERROR OPEN CAM"));
-          capture_mat.open(ipcam_addresses);
+          m_capture_mat.open(m_ipcam_addresses);
           #endif
-          cnt++;
+          m_cnt++;
           waitForMessages(1.0);
         }
         
         #if defined(DUNE_USING_RASPICAMCV)
-        if ( capture )
+        if ( m_capture )
         #else
-        if ( capture_mat.isOpened() )
+        if ( m_capture_mat.isOpened() )
         #endif 
         {
           //Capture Image
           #if defined(DUNE_USING_RASPICAMCV)
-          frame = raspiCamCvQueryFrame(capture);
+          m_frame = raspiCamCvQueryFrame(m_capture);
           /*cvReleaseImage( &frame );
           if (frame == 0 )
             frame = cvCreateImage ( cvSize(inic_width, inic_height), img -> depth, img -> nChannels);
           cvResize(img, frame);*/
           //Size of Image capture
-          frame_width = frame -> width;
-          frame_height = frame -> height;
-          inf(DTR("Image Size: %d x %d"), frame_width, frame_height);
+          m_frame_width = m_frame -> width;
+          m_frame_height = m_frame -> height;
+          inf(DTR("Image Size: %d x %d"), m_frame_width, m_frame_height);
           #else
           //frame = cvQueryFrame( capture );
-          capture_mat >> frame;
-          frame_height = frame.rows;
-          frame_width = frame.cols;
-          inf(DTR("Image Size: %d x %d"), frame_width, frame_height);
-          clean_buffer(50);
+          m_capture_mat >> m_frame;
+          m_frame_height = m_frame.rows;
+          m_frame_width = m_frame.cols;
+          inf(DTR("Image Size: %d x %d"), m_frame_width, m_frame_height);
+          cleanBuffer(50);
           #endif
         }
         
-        cnt=1;
-        time_acquisition();
-        inf(DTR("Start Hour: %d:%d:%d"), hour, min, sec);
+        m_cnt = 1;
+        timeAcquisition();
+        inf(DTR("Start Hour: %d:%d:%d"), m_hour, m_min, m_sec);
 
         while (!stopping())
         {
-          t1=(double)cvGetTickCount();
+          m_t1=(double)cvGetTickCount();
           #if defined(DUNE_USING_RASPICAMCV)
-          while(flag_capture == 2 && !stopping());
-          flag_capture = 0;
-          frame = raspiCamCvQueryFrame(capture);
-          flag_capture = 1;
+          while(m_flag_capture == 2 && !stopping());
+          m_flag_capture = 0;
+          m_frame = raspiCamCvQueryFrame(m_capture);
+          m_flag_capture = 1;
           #else
-          capture_mat >> frame;
+          m_capture_mat >> m_frame;
           #endif
           
           #if defined(DUNE_USING_RASPICAMCV)
-          if ( !capture )
+          if ( !m_capture )
           {
             err(DTR("ERROR GRAB IMAGE"));
           }
           #else
-          if ( !capture_mat.isOpened() )
+          if ( !m_capture_mat.isOpened() )
           {
             err(DTR("ERROR GRAB IMAGE"));
           } 
           #endif
           
           //Add information in frame result
-          time_acquisition();
+          timeAcquisition();
           #if defined(DUNE_USING_RASPICAMCV)
-          sprintf(text,"Hour: %d:%d:%d",hour,min,sec);
-          cvPutText(frame, text, cvPoint(10, 20), &font, cvScalar(20, 90, 250, 0));
-          sprintf(text,"Data: %d/%d/%d",day,mon,year);
-          cvPutText(frame, text, cvPoint(10, 42), &font, cvScalar(20, 90, 250, 0));
-          text[0]='\0';
+          sprintf(m_text,"Hour: %d:%d:%d", m_hour, m_min, m_sec);
+          cvPutText(m_frame, m_text, cvPoint(10, 20), &m_font, cvScalar(20, 90, 250, 0));
+          sprintf(m_text,"Data: %d/%d/%d", m_day, m_mon, m_year);
+          cvPutText(m_frame, m_text, cvPoint(10, 42), &m_font, cvScalar(20, 90, 250, 0));
+          m_text[0]='\0';
           //Save video
-          save_video(frame, 1);
-          t2=(double)cvGetTickCount();
-          while(((t2-t1)/(cvGetTickFrequency()*1000.))<(1000/10))
+          saveVideo(m_frame, 1);
+          m_t2=(double)cvGetTickCount();
+          while(((m_t2-m_t1)/(cvGetTickFrequency()*1000.))<(1000/10))
           {
-            t2=(double)cvGetTickCount();
+            m_t2=(double)cvGetTickCount();
           }
           //inf("\ntime: %gms  fps: %.2g\n",(t2-t1)/(cvGetTickFrequency()*1000.), 1000./((t2-t1)/(cvGetTickFrequency()*1000.)));
           #else
-          sprintf(text,"Hour: %d:%d:%d",hour,min,sec);
-          cv::putText(frame, text, cv::Point(10, 22), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
-          sprintf(text,"Data: %d/%d/%d",day,mon,year);
-          cv::putText(frame, text, cv::Point(10, 42), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
-          text[0]='\0';
+          sprintf(m_text,"Hour: %d:%d:%d", m_hour, m_min, m_sec);
+          cv::putText(m_frame, m_text, cv::Point(10, 22), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
+          sprintf(m_text,"Data: %d/%d/%d", m_day, m_mon, m_year);
+          cv::putText(m_frame, m_text, cv::Point(10, 42), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
+          m_text[0]='\0';
           //Save video
-          save_video(frame, 1);
-          t2=(double)cvGetTickCount();
-          while(((t2-t1)/(cvGetTickFrequency()*1000.))<(1000/10))
+          saveVideo(m_frame, 1);
+          m_t2=(double)cvGetTickCount();
+          while(((m_t2-m_t1)/(cvGetTickFrequency()*1000.))<(1000/10))
           {
-            t2=(double)cvGetTickCount();
+            m_t2=(double)cvGetTickCount();
           }
           //inf("\ntime: %gms  fps: %.2g\n",(t2-t1)/(cvGetTickFrequency()*1000.), 1000./((t2-t1)/(cvGetTickFrequency()*1000.)));
           #endif
         }
-        save_video( frame, 0);
+        saveVideo( m_frame, 0);
         //cvDestroyWindow( "Live Video" );
         #if defined(DUNE_USING_RASPICAMCV)
         //raspiCamCvReleaseCapture( &capture );
         #else
-        capture_mat.release();
+        m_capture_mat.release();
         #endif
       }
     };
