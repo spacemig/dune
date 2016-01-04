@@ -58,6 +58,8 @@ namespace Vision
     using DUNE_NAMESPACES;
     struct Arguments
     {
+      // - port number
+      unsigned printimglayer;
       // - IpCam
       std::vector<std::string> ipcam;
     };
@@ -153,6 +155,10 @@ namespace Vision
         param("IpCam", m_args.ipcam)
           //.defaultValue("localhost")
           .description("IpCam Addresses");
+
+        param("PrintImgLayer", m_args.printimglayer)
+          //.defaultValue("localhost")
+          .description("Disable/Enable image layer print");
       }
       
       //! Update internal state with new parameter values.
@@ -390,11 +396,14 @@ namespace Vision
           //Add information in frame result
           timeAcquisition();
           #if defined(DUNE_USING_RASPICAMCV)
-          sprintf(m_text,"Hour: %d:%d:%d", m_hour, m_min, m_sec);
-          cvPutText(m_frame, m_text, cvPoint(10, 20), &m_font, cvScalar(20, 90, 250, 0));
-          sprintf(m_text,"Data: %d/%d/%d", m_day, m_mon, m_year);
-          cvPutText(m_frame, m_text, cvPoint(10, 42), &m_font, cvScalar(20, 90, 250, 0));
-          m_text[0]='\0';
+          if(m_args.printimglayer == 1)
+          {
+            sprintf(m_text,"Hour: %d:%d:%d", m_hour, m_min, m_sec);
+            cvPutText(m_frame, m_text, cvPoint(10, 20), &m_font, cvScalar(20, 90, 250, 0));
+            sprintf(m_text,"Data: %d/%d/%d", m_day, m_mon, m_year);
+            cvPutText(m_frame, m_text, cvPoint(10, 42), &m_font, cvScalar(20, 90, 250, 0));
+            m_text[0]='\0'; 
+          }
           //Save video
           saveVideo(m_frame, 1);
           m_t2=(double)cvGetTickCount();
@@ -404,11 +413,14 @@ namespace Vision
           }
           //inf("\ntime: %gms  fps: %.2g\n",(t2-t1)/(cvGetTickFrequency()*1000.), 1000./((t2-t1)/(cvGetTickFrequency()*1000.)));
           #else
-          sprintf(m_text,"Hour: %d:%d:%d", m_hour, m_min, m_sec);
-          cv::putText(m_frame, m_text, cv::Point(10, 22), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
-          sprintf(m_text,"Data: %d/%d/%d", m_day, m_mon, m_year);
-          cv::putText(m_frame, m_text, cv::Point(10, 42), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
-          m_text[0]='\0';
+          if(m_args.printimglayer == 1)
+          { 
+            sprintf(m_text,"Hour: %d:%d:%d", m_hour, m_min, m_sec);
+            cv::putText(m_frame, m_text, cv::Point(10, 22), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
+            sprintf(m_text,"Data: %d/%d/%d", m_day, m_mon, m_year);
+            cv::putText(m_frame, m_text, cv::Point(10, 42), CV_FONT_HERSHEY_PLAIN, 1.5, cv::Scalar(0, 0, 255, 0),1.8, CV_AA);
+            m_text[0]='\0';
+          }
           //Save video
           saveVideo(m_frame, 1);
           m_t2=(double)cvGetTickCount();
