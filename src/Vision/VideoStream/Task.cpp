@@ -368,7 +368,7 @@ namespace Vision
         m_client.size = 0;
         m_flag_stat_video = 0;
         
-        #if raspicam_on == 1
+        #if defined(DUNE_USING_RASPICAMCV)
         m_config = (RASPIVID_CONFIG*)malloc(sizeof(RASPIVID_CONFIG));
         m_inic_width = 160;
         m_inic_height = 120;
