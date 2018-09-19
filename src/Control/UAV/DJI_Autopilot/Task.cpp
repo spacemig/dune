@@ -40,16 +40,20 @@
 
 //DJI OSDK Library Headers
 
-#include <dji/osdk-core/inc/DJI_Follow.h>
-#include <dji/osdk-core/inc/DJI_Flight.h>
-#include <dji/osdk-core/inc/DJI_Version.h>
-#include <dji/osdk-core/inc/DJI_WayPoint.h>
+//#include <dji/Onboard-SDK-3.6/osdk-core/api/inc/dji_fo
+//#include <dji/osdk-core/inc/DJI_Follow.h>
+//#include <dji/osdk-core/inc/DJI_Flight.h>
+//#include <dji/osdk-core/inc/DJI_Version.h>
+//#include <dji/osdk-core/inc/DJI_WayPoint.h>
 
-//DJI Linux Application Headers
-#include <dji/platform/linux/inc/LinuxSerialDevice.h>
-#include <dji/platform/linux/inc/LinuxThread.h>
-#include <dji/osdk-wrapper/inc/LinuxSetup.h>
-#include <dji/osdk-wrapper/inc/LinuxFlight.h>
+////DJI Linux Application Headers
+//#include <dji/Onboard-SDK-3.6.1/osdk-core/platform/linux/inc/linux_serial_device.hpp>
+//#include <dji/Onboard-SDK-3.6.1/osdk-core/platform/linux/inc/linux_serial_device.hpp>
+//#include <dji/platform/linux/inc/LinuxThread.h>
+//#include <dji/osdk-wrapper/inc/LinuxSetup.h>
+//#include <dji/osdk-wrapper/inc/LinuxFlight.h>
+
+#include <dji/Onboard-SDK-3.6.1/osdk-core/api/inc/dji_vehicle.hpp>
 
 namespace Control
 {
@@ -65,9 +69,9 @@ namespace Control
         //! Communications timeout
         uint8_t comm_timeout;
         //! TCP Port
-        uint16_t TCP_port;
+//        uint16_t TCP_port;
         //! TCP Address
-        Address TCP_addr;
+//        Address TCP_addr;
         //! Telemetry Rate
         uint8_t trate;
         // Serial port device.
@@ -84,12 +88,12 @@ namespace Control
         double m_last_pkt_time;
         uint8_t m_buf[512];
         //! TCP socket
-        Network::TCPSocket* m_TCP_sock;
+//        Network::TCPSocket* m_TCP_sock;
         //! DJI serial
-        DJI::onboardSDK::LinuxSerialDevice* serialDevice;
-        DJI::onboardSDK::CoreAPI* api;
-        DJI::onboardSDK::Flight* flight;
-        DJI::onboardSDK::WayPoint* waypointObj;
+//        DJI::onboardSDK::LinuxSerialDevice* serialDevice;
+//        DJI::onboardSDK::CoreAPI* api;
+//        DJI::onboardSDK::Flight* flight;
+//        DJI::onboardSDK::WayPoint* waypointObj;
 
         //! Estimated state message.
         IMC::EstimatedState m_estate;
@@ -101,13 +105,13 @@ namespace Control
           Tasks::Task(name, ctx)
         {
 
-          param("TCP - Port", m_args.TCP_port)
-              .defaultValue("5760")
-              .description("Port for connection to Ardupilot");
+//          param("TCP - Port", m_args.TCP_port)
+//              .defaultValue("5760")
+//              .description("Port for connection to Ardupilot");
 
-          param("TCP - Address", m_args.TCP_addr)
-              .defaultValue("127.0.0.1")
-              .description("Address for connection to Ardupilot");
+//          param("TCP - Address", m_args.TCP_addr)
+//              .defaultValue("127.0.0.1")
+//              .description("Address for connection to Ardupilot");
 
           param("Communications Timeout", m_args.comm_timeout)
               .minimumValue("1")
@@ -150,7 +154,7 @@ namespace Control
         void
         onResourceRelease(void)
         {
-          Memory::clear(m_TCP_sock);
+//          Memory::clear(m_TCP_sock);
         }
 
         void
@@ -229,6 +233,7 @@ namespace Control
         void
         consume(const IMC::VehicleState* msg)
         {
+//            msg->
         }
 
         //! Used for HITL simulations
@@ -250,10 +255,14 @@ namespace Control
         void
         onMain(void)
         {
+//          setEntityState(IMC::EntityState::ESTA_NORMAL, Status::CODE_ACTIVE);
+
           while (!stopping())
             {
+              setEntityState(IMC::EntityState::ESTA_NORMAL, Status::CODE_ACTIVE);
+
               // Handle data
-              if (m_TCP_sock)
+              if (1) // if serial DJI
                 {
                   handleDjiData();
                 }
@@ -282,14 +291,15 @@ namespace Control
 
               // Handle IMC messages from bus
               consumeMessages();
+              waitForMessages(0.5);
             }
         }
 
         bool
         poll(double timeout)
         {
-          if (m_TCP_sock != NULL)
-            return Poll::poll(*m_TCP_sock, timeout);
+//          if (m_TCP_sock != NULL)
+//            return Poll::poll(*m_TCP_sock, timeout);
 
           return false;
         }
@@ -297,34 +307,34 @@ namespace Control
         int
         sendData(uint8_t* bfr, int size)
         {
-          if (m_TCP_sock)
-            {
-              trace("Sending something");
-              return m_TCP_sock->write((char*)bfr, size);
-            }
+//          if (m_TCP_sock)
+//            {
+//              trace("Sending something");
+//              return m_TCP_sock->write((char*)bfr, size);
+//            }
           return 0;
         }
 
         int
         receiveData(uint8_t* buf, size_t blen)
         {
-          if (m_TCP_sock)
-            {
-              try
-              {
-                return m_TCP_sock->read(buf, blen);
-              }
-              catch (std::runtime_error& e)
-              {
-                err("%s", e.what());
-                war(DTR("Connection lost, retrying..."));
-                Memory::clear(m_TCP_sock);
+//          if (m_TCP_sock)
+//            {
+//              try
+//              {
+//                return m_TCP_sock->read(buf, blen);
+//              }
+//              catch (std::runtime_error& e)
+//              {
+//                err("%s", e.what());
+//                war(DTR("Connection lost, retrying..."));
+//                Memory::clear(m_TCP_sock);
 
-                m_TCP_sock = new Network::TCPSocket;
-                m_TCP_sock->connect(m_args.TCP_addr, m_args.TCP_port);
-                return 0;
-              }
-            }
+//                m_TCP_sock = new Network::TCPSocket;
+//                m_TCP_sock->connect(m_args.TCP_addr, m_args.TCP_port);
+//                return 0;
+//              }
+//            }
           return 0;
         }
 
@@ -335,39 +345,39 @@ namespace Control
           try
           {
             //! Instantiate a serialDevice, an API object, flight and waypoint objects and a read thread.
-            serialDevice = new DJI::onboardSDK::LinuxSerialDevice(m_args.uart_dev, m_args.uart_baud);
-            api = new DJI::onboardSDK::CoreAPI(serialDevice);
-            flight = new DJI::onboardSDK::Flight(api);
-            waypointObj = new DJI::onboardSDK::WayPoint(api);
+//            serialDevice = new DJI::onboardSDK::LinuxSerialDevice(m_args.uart_dev, m_args.uart_baud);
+//            api = new DJI::onboardSDK::CoreAPI(serialDevice);
+//            flight = new DJI::onboardSDK::Flight(api);
+//            waypointObj = new DJI::onboardSDK::WayPoint(api);
             //            ackReturnData releaseControlStatus;
 
             //! Initializes the read thread and the call back thread.
             //LinuxThread readThread(api,2);
 
-            m_TCP_sock = new TCPSocket;
-            m_TCP_sock->connect(m_args.TCP_addr, m_args.TCP_port);
-            m_TCP_sock->setNoDelay(true);
+//            m_TCP_sock = new TCPSocket;
+//            m_TCP_sock->connect(m_args.TCP_addr, m_args.TCP_port);
+//            m_TCP_sock->setNoDelay(true);
 
             //! Enable non-blocking callback thread mechanism
             //            api->nonBlockingCBThreadEnable = true;
 
             //! Initializes the read thread and the call back thread.
-            LinuxThread readThread(api,2);
+//            LinuxThread readThread(api,2);
             //            LinuxThread CallbackThread(api,3);
 
             //! Setup
-            int setupStatus = setup(serialDevice, api, &readThread);
+//            int setupStatus = setup(serialDevice, api, &readThread);
 
-            if (setupStatus == -1)
-              {
-                std::cout << "This program will exit now. \n";
-                exit(0);
-              }
+//            if (setupStatus == -1)
+//              {
+//                std::cout << "This program will exit now. \n";
+//                exit(0);
+//              }
 
             inf("1");
 
             //! Set broadcast Freq Defaults
-            unsigned short broadcastAck = api->setBroadcastFreqDefaults(1);
+//            unsigned short broadcastAck = api->setBroadcastFreqDefaults(1);
             usleep(500000);
 
             inf("2");
@@ -380,24 +390,24 @@ namespace Control
             int blockingTimeout = 1; //Seconds
 
             //! Monitored Takeoff
-            ackReturnData takeoffStatus = monitoredTakeoff(api, flight, blockingTimeout);
+//            ackReturnData takeoffStatus = monitoredTakeoff(api, flight, blockingTimeout);
 
             inf("3");
 
             //! Set broadcast Freq Defaults
-            broadcastAck = api->setBroadcastFreqDefaults(1);
+//            broadcastAck = api->setBroadcastFreqDefaults(1);
 
             inf("4");
 
             //! If the aircraft took off, continue to do flight control tasks
-            if (takeoffStatus.status == 1)
-              {
+//            if (takeoffStatus.status == 1)
+//              {
 
-                std::cout << "Hello M100" << std::endl;
+//                std::cout << "Hello M100" << std::endl;
 
-              } else {
-                std::cout << "DAHHHH M100" << std::endl;
-              }
+//              } else {
+//                std::cout << "DAHHHH M100" << std::endl;
+//              }
 
             inf("5");
 
@@ -406,7 +416,7 @@ namespace Control
           }
           catch (...)
           {
-            Memory::clear(m_TCP_sock);
+//            Memory::clear(m_TCP_sock);
 
             war(DTR("Connection failed, retrying..."));
             setEntityState(IMC::EntityState::ESTA_NORMAL, Status::CODE_COM_ERROR);
@@ -419,6 +429,14 @@ namespace Control
 
           double now = Clock::get();
           int counter = 0;
+
+          // simple test to dispatch data to the IMC bus (does it show on Neptus?)
+          m_estate.lat = 10 ;
+          m_estate.lon = 3  ;
+          m_estate.height = 5 ;
+
+          dispatch(m_estate);
+
 
           while (poll(0.01) && counter < 100)
             {
