@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Eduardo Marques                                                  *
@@ -185,6 +187,11 @@ namespace DUNE
       .units(Units::Meter)
       .description("Admissible altitude when doing depth control");
 
+      param("Maximum Track Length", m_max_track_length)
+      .defaultValue("25000")
+	  .units(Units::Meter)
+	  .description("Maximum adimissible track length");
+
       m_ctx.config.get("General", "Absolute Maximum Depth", "50.0", m_btd.args.depth_limit);
       m_btd.args.depth_limit -= c_depth_margin;
 
@@ -292,7 +299,7 @@ namespace DUNE
     {
       if (!isActive())
       {
-        err(DTR("not active"));
+        war(DTR("not active"));
         return;
       }
 
@@ -317,7 +324,8 @@ namespace DUNE
 
         Coordinates::toWGS84(m_estate, m_pcs.start_lat, m_pcs.start_lon);
 
-        m_pcs.start_z = m_estate.z;
+        m_pcs.start_z = m_estate.height - m_estate.z;
+        m_pcs.start_z_units = dpath->start_z_units;
 
         no_start = true;
       }
@@ -358,6 +366,13 @@ namespace DUNE
 
       Coordinates::getBearingAndRange(m_ts.start, m_ts.end,
                                       &m_ts.track_bearing, &m_ts.track_length);
+
+      if (m_max_track_length > 0 && m_ts.track_length > m_max_track_length)
+      {
+    	  signalError(DTR("track length is too long"));
+    	  return;
+      }
+
 
       // Re-initializing tracking state values
       m_ts.start_time = now;
@@ -724,16 +739,7 @@ namespace DUNE
         getTrackPosition(m_estate, &m_ts.track_pos.x, &m_ts.track_pos.y);
         m_ts.course_error = Angles::normalizeRadian(m_ts.course - m_ts.track_bearing);
 
-        float errx = std::abs(m_ts.track_length - m_ts.track_pos.x);
-        float erry = std::abs(m_ts.track_pos.y);
-        float s = std::max((double)m_eta_min_speed, m_ts.speed);
-
-        if (errx <= erry && erry < c_erry_factor * m_time_factor * s)
-          m_ts.eta = errx / s;
-        else
-          m_ts.eta = Math::norm(errx, erry) / s;
-
-        m_ts.eta = std::min(65535.0, m_ts.eta - m_time_factor);
+        m_ts.eta = getEta(m_ts);
 
         bool was_nearby = m_ts.nearby;
 
@@ -1042,6 +1048,23 @@ namespace DUNE
       lts.los_angle = getBearing(state, lts.end);
 
       step(state, lts);
+    }
+
+    double
+    PathController::getEta(const TrackingState& ts)
+    {
+      double eta;
+      float errx = std::abs(ts.track_length - ts.track_pos.x);
+      float erry = std::abs(ts.track_pos.y);
+      float time_factor = getTimeFactor();
+      float speed = getSpeed();
+
+      if (errx <= erry && erry < c_erry_factor * time_factor * speed)
+        eta = errx / speed;
+      else
+        eta = Math::norm(errx, erry) / speed;
+
+      return std::min(65535.0, eta - time_factor);
     }
 
     void

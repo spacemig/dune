@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Pedro Calado                                                     *
@@ -48,6 +50,11 @@
 #include "Dislodge.hpp"
 #include "MuxedManeuver.hpp"
 #include "ScheduledGoto.hpp"
+#include "Takeoff.hpp"
+#include "Land.hpp"
+#include "Drop.hpp"
+#include "Sample.hpp"
+#include "StationKeepingExtended.hpp"
 
 namespace Maneuver
 {
@@ -58,7 +65,8 @@ namespace Maneuver
     static const std::string c_names[] = {"IdleManeuver", "Goto", "Launch", "Loiter",
                                           "StationKeeping", "YoYo", "Rows",
                                           "FollowPath", "Elevator", "PopUp",
-                                          "Dislodge","ScheduledGoto"};
+                                          "Dislodge","ScheduledGoto", "Takeoff", "Land",
+                                          "Drop", "Sample", "StationKeepingExtended"};
 
     enum ManeuverType
     {
@@ -86,6 +94,16 @@ namespace Maneuver
       TYPE_DISLODGE,
       //! Type ScheduledGoto
       TYPE_SCHEDULEDGOTO,
+      //! Type Takeoff
+      TYPE_TAKEOFF,
+      //! Type Land
+      TYPE_LAND,
+      //! Type Drop
+      TYPE_DROP,
+      //! Type Sample
+      TYPE_SAMPLE,
+	  //! Type StationKeepingExtended
+	  TYPE_SKEEPEXT,
       //! Total number of maneuvers
       TYPE_TOTAL
     };
@@ -108,9 +126,14 @@ namespace Maneuver
       PopUpArgs popup;
       //! Dislodge Arguments
       DislodgeArgs dislodge;
-      //!
+      //! Scheduled Arguments
       ScheduledArgs scheduled;
-
+      //! Drop Arguments
+      DropArgs drop;
+      //! Sample Arguments
+      SampleArgs sample;
+      //! StationKeepingExtended Arguments
+      StationKeepingExtendedArgs skext;
     };
 
     struct Task: public DUNE::Maneuvers::Maneuver
@@ -262,6 +285,42 @@ namespace Maneuver
         .units(Units::MeterPerSecond)
         .description("Maximum commanded speed");
 
+        param("Drop -- Servo Id", m_args.drop.servoId)
+          .defaultValue("2")
+          .description("Servo Id.");
+
+        param("Drop -- Servo Value", m_args.drop.servoValue)
+          .defaultValue("3.14159")
+          .description("Servo Value in radians.");
+
+        param("Sample -- Syringe 0 Id", m_args.sample.syringe0Id)
+        .defaultValue("0")
+        .description("Port to use for syringe 0 servo");
+
+        param("Sample -- Syringe 1 Id", m_args.sample.syringe1Id)
+        .defaultValue("1")
+        .description("Port to use for syringe 1 servo");
+
+        param("Sample -- Syringe 2 Id", m_args.sample.syringe2Id)
+        .defaultValue("2")
+        .description("Port to use for syringe 2 servo");
+
+        param("Sample -- Servo Open Value", m_args.sample.openValue)
+        .defaultValue("3.14159")
+        .description("Value to open servo");
+
+        param("Sample -- Servo Close Value", m_args.sample.closeValue)
+        .defaultValue("1.57079")
+        .description("Value to close servo");
+
+        param("Sample -- Execution Tolerance", m_args.sample.max_time)
+        .defaultValue("30")
+        .description("Default time tolerance to execute maneuver");
+
+        param("StationKeepingExtended -- Minimum Radius", m_args.skext.min_radius)
+        .defaultValue("10.0")
+        .description("Minimum radius for StationKeepingExtended to prevent incompatibility with path controller");
+
         m_ctx.config.get("General", "Underwater Depth Threshold", "0.3", m_args.dislodge.depth_threshold);
 
         m_ctx.config.get("General", "Absolute Maximum Depth", "50.0", m_args.yoyo.max_depth);
@@ -273,6 +332,7 @@ namespace Maneuver
         bind<IMC::EstimatedState>(this);
         bind<IMC::GpsFix>(this);
         bind<IMC::VehicleMedium>(this);
+        bind<IMC::Throttle>(this);
       }
 
       void
@@ -344,6 +404,11 @@ namespace Maneuver
         m_maneuvers[TYPE_POPUP] = create<PopUp>(&m_args.popup);
         m_maneuvers[TYPE_DISLODGE] = create<Dislodge>(&m_args.dislodge);
         m_maneuvers[TYPE_SCHEDULEDGOTO] = create<ScheduledGoto>(&m_args.scheduled);
+        m_maneuvers[TYPE_TAKEOFF] = create<Takeoff>();
+        m_maneuvers[TYPE_LAND] = create<Land>();
+        m_maneuvers[TYPE_DROP] = create<Drop>(&m_args.drop);
+        m_maneuvers[TYPE_SAMPLE] = create<Sample>(&m_args.sample);
+        m_maneuvers[TYPE_SKEEPEXT] = create<StationKeepingExtended>(&m_args.skext);
       }
 
       void
@@ -421,6 +486,12 @@ namespace Maneuver
       consume(const IMC::VehicleMedium* msg)
       {
         m_maneuvers[m_type]->onVehicleMedium(msg);
+      }
+
+      void
+      consume(const IMC::Throttle* msg)
+      {
+        m_maneuvers[m_type]->onThrottle(msg);
       }
 
       void

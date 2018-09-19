@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Ricardo Martins                                                  *
@@ -80,6 +82,8 @@ namespace Transports
       bool dynamic_nodes;
       // Only transmit messages from local system
       bool only_local;
+      // Optional custom service type
+      std::string custom_service;
     };
 
     // Internal buffer size.
@@ -176,6 +180,10 @@ namespace Transports
         .defaultValue("false")
         .description("Only transmit messsages from local system.");
 
+        param("Custom Service Type", m_args.custom_service)
+        .defaultValue("")
+        .description("Optional custom service type (imc+udp+<Custom Service Type>), empty entry gives default service (imc+udp)");
+
         // Allocate space for internal buffer.
         m_bfr = new uint8_t[c_bfr_size];
 
@@ -221,14 +229,14 @@ namespace Transports
           debug("limited communications simulation is not active");
           m_comm_limitations = false;
         }
-
-        // Register normal messages.
-        bind(this, m_args.messages);
       }
 
       void
       onResourceAcquisition(void)
       {
+        // Register normal messages.
+        bind(this, m_args.messages);
+
         // Find a free port.
         unsigned port_limit = m_args.port + c_port_retries;
         while (m_args.port != port_limit)
@@ -259,7 +267,17 @@ namespace Transports
           for (unsigned i = 0; i < itfs.size(); ++i)
           {
             std::stringstream os;
-            os << "imc+udp://" << itfs[i].address().str() << ":" << m_args.port
+            std::string service = "imc+udp";
+
+            // if custom service type is enabled
+            if (m_args.custom_service != "")
+            {
+              std::stringstream cs;
+              cs << service << "+" << m_args.custom_service;
+              service = cs.str();
+            }
+
+            os << service << "://" << itfs[i].address().str() << ":" << m_args.port
                << "/";
 
             IMC::AnnounceService announce;

@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Aníbal Matos (original LBL filter circa 1999)                    *
@@ -154,8 +156,21 @@ namespace Navigation
         float rpm_max;
         //! Heading bias uncertainty alignment threshold.
         double alignment_index;
+        //! Heading alignment sensor diff threshold
+        double alignment_diff;
+        //! Diff threshold - buffer of values for threshold validation
+        double heading_buffer_value;
         //! Abort if navigation exceeds maximum uncertainty.
         bool abort;
+        //! Activate RPM to m/s estimation
+        bool rpm_estimation;
+        //!  Activate RPM to m/s % limit on estimation
+        bool speed_relation_Limit;
+        //!  Value RPM to m/s limit on estimation
+        double speed_relation_limit_value;
+        //!  Distance of Depth sensor to the veicle pitch rotation axis 
+        float distance_depth_sensor;
+
       };
 
       struct Task: public DUNE::Navigation::BasicNavigation
@@ -166,10 +181,12 @@ namespace Navigation
         bool m_usbl_reading;
         //! Moving average for vehicle forward speed.
         MovingAverage<double>* m_avg_speed;
-        //! Medium handler.
-        Monitors::MediumHandler m_medium;
         //! Task arguments.
         Arguments m_args;
+        //! Heading alignment buffer
+        int m_heading_buffer;
+        //! Pointer to speed model for speed conversions
+        const Plans::SpeedModel* m_speed_model;
 
         Task(const std::string& name, Tasks::Context& ctx):
           DUNE::Navigation::BasicNavigation(name, ctx),
@@ -239,16 +256,47 @@ namespace Navigation
           .maximumValue("1e-4")
           .description("Heading bias uncertainty alignment threshold");
 
+          param("Heading alignment sensor diff", m_args.alignment_diff)
+          .defaultValue("15")
+          .minimumValue("1")
+          .maximumValue("180")
+          .description("Heading alignment sensor diff threshold");
+
+          param("Heading buffer value", m_args.heading_buffer_value)
+          .defaultValue("200")
+          .minimumValue("1")
+          .description("Heading buffer value - how many repetitions to aligned");
+
           param("Entity Label - IMU", m_args.elabel_imu)
           .description("Entity label of the IMU");
+
+          param("Depth sensor localization in x axis", m_args.distance_depth_sensor)
+          .defaultValue("0.0")
+          .minimumValue("0.0")
+          .maximumValue("2.0")
+          .description("Depth sensor localization in x axis in meters- used for depth correction due to pitch");
+
+          param("Rpm to speed estimation", m_args.rpm_estimation)
+          .defaultValue("true")
+          .description("");
+
+          param("Activate speed to rpm estimation limit", m_args.speed_relation_Limit)
+          .defaultValue("false")
+          .description("");
+
+          param("speed to rpm estimation percentage limit", m_args.speed_relation_limit_value)
+          .defaultValue("15")
+          .minimumValue("1")
+          .maximumValue("100")
+          .description("speed to rpm maximum diference between estimation and speed model");
 
           // Extended Kalman Filter initialization.
           m_kal.reset(NUM_STATE, NUM_OUT);
           resetKalman();
+          m_heading_buffer=0;
 
           // Register callbacks
           bind<IMC::EntityActivationState>(this);
-          bind<IMC::VehicleMedium>(this);
         }
 
         void
@@ -294,6 +342,7 @@ namespace Navigation
         {
           BasicNavigation::onResourceInitialization();
           m_avg_speed = new MovingAverage<double>(m_args.navg_speed);
+          startSpeedModel(&m_ctx.config);
         }
 
         void
@@ -301,6 +350,7 @@ namespace Navigation
         {
           BasicNavigation::onResourceRelease();
           Memory::clear(m_avg_speed);
+          Memory::clear(m_speed_model);
         }
 
         void
@@ -344,8 +394,7 @@ namespace Navigation
             return;
 
           if ((msg->state == IMC::EntityActivationState::EAS_ACTIVE ||
-               msg->state == IMC::EntityActivationState::EAS_ACT_DONE)
-              && !m_medium.outWater())
+               msg->state == IMC::EntityActivationState::EAS_ACT_DONE))
           {
             // IMU already activated.
             if (m_dead_reckoning)
@@ -393,12 +442,6 @@ namespace Navigation
           }
         }
 
-        void
-        consume(const IMC::VehicleMedium* msg)
-        {
-          m_medium.update(msg);
-        }
-
         bool
         setup(void)
         {
@@ -444,7 +487,7 @@ namespace Navigation
         }
 
         void
-        updateKalmanParametersGps(double hacc)
+        updateKalmanGpsParameters(double hacc)
         {
           if (hacc > GPS_BAD)
           {
@@ -584,7 +627,22 @@ namespace Navigation
           }
           else if (m_time_without_gps.overflow() && m_time_without_dvl.overflow())
           {
-            double u = m_rpm * m_kal.getState(STATE_K) * std::cos(getEuler(AXIS_Y));
+            double u = 0.0;
+            double speed_m  = getRpmToMs(m_rpm);
+            if(m_args.rpm_estimation)
+            {
+              u = m_rpm * m_kal.getState(STATE_K) * std::cos(getEuler(AXIS_Y));
+              if(m_args.speed_relation_Limit)
+              {
+                double speedR = (std::abs(u) - std::abs(speed_m))/ std::abs(speed_m) * 100;
+                if (speedR > m_args.speed_relation_limit_value)
+                  u = speed_m;
+              }
+            }
+            else
+            {
+              u = speed_m;
+            }
             m_kal.setInnovation(OUT_U, u - m_kal.getState(STATE_U));
             m_kal.setInnovation(OUT_V, 0 - m_kal.getState(STATE_V));
           }
@@ -627,12 +685,32 @@ namespace Navigation
           m_kal.setState(STATE_K, k_lim);
 
           // Check alignment threshold index.
+          double diff_psi = std::abs(Angles::normalizeRadian(Angles::normalizeRadian(m_kal.getState(STATE_PSI))
+                                                             - Angles::normalizeRadian(getEuler(AXIS_Z)) ) );
+
+
           if (m_dead_reckoning)
           {
-            if (m_kal.getCovariance(STATE_PSI_BIAS) < m_args.alignment_index)
-              m_aligned = true;
+            if (m_kal.getCovariance(STATE_PSI_BIAS) < m_args.alignment_index &&
+                diff_psi < Angles::normalizeRadian(Angles::radians(m_args.alignment_diff)) )
+            {
+                m_aligned = true;
+                m_heading_buffer=0;
+            }
             else
-              m_aligned = false;
+            {
+              if (m_aligned)
+              {
+                m_heading_buffer++;
+                if(m_heading_buffer > m_args.heading_buffer_value)
+                {
+                  sendDeActiveIMU();
+                  war(DTR("navigation not aligned - Automatic IMU poweroff"));
+                  m_aligned  = false;
+                  m_heading_buffer=0;
+                }
+              }
+            }
           }
 
           checkUncertainty(m_args.abort);
@@ -647,6 +725,41 @@ namespace Navigation
           m_valid_gv = false;
           m_valid_wv = false;
           resetKalman();
+        }
+
+        void
+        sendDeActiveIMU(void)
+        {
+          IMC::EntityParameter p;
+          p.name = "Active";
+          p.value = "false";
+          IMC::SetEntityParameters msg;
+          msg.name = m_args.elabel_imu ;
+          msg.params.push_back(p);
+          dispatch(msg);
+        }
+
+        void
+        startSpeedModel(Parsers::Config* config)
+        {
+          try
+          {
+            m_speed_model = new Plans::SpeedModel(config);
+            m_speed_model->validate();
+          }
+          catch (...)
+          {
+            Memory::clear(m_speed_model);
+            inf(DTR("Nav: speed model invalid"));
+          }
+        }
+
+        double
+        getRpmToMs(double rpm)
+        {
+          if(m_speed_model != NULL)
+          return m_speed_model->toMPS(rpm,IMC::SUNITS_RPM);
+        return m_args.rpm_ini*rpm;
         }
 
         // Reinitialize Extended Kalman Filter transition matrix function.
@@ -702,6 +815,8 @@ namespace Navigation
 
           m_estate.u = m_avg_speed->update(m_kal.getState(STATE_U));
           m_estate.v = m_kal.getState(STATE_V);
+          m_estate.depth = getDepth() - m_estate.theta * m_args.distance_depth_sensor;
+          m_estate.z = m_last_z - m_estate.depth;
 
           // Log Navigation Uncertainty.
           m_uncertainty.psi = m_kal.getCovariance(STATE_PSI);

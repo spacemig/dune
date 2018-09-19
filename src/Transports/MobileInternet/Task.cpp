@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Ricardo Martins                                                  *
@@ -96,6 +98,12 @@ namespace Transports
       bool ip_fwd;
       //! Enable USB Mode switch (USB pen).
       bool code_presentation_mode;
+      //! Enable dynamic DNS
+      bool dyn_dns;
+      //! Dynamic DNS update periodicity
+      double dyn_dns_period;
+      //! Dynamic DNS update url
+      std::string dyn_dns_url;
     };
 
     struct Task: public Tasks::Task
@@ -110,6 +118,8 @@ namespace Transports
       std::string m_command_nat_start;
       //! Stop NAT command.
       std::string m_command_nat_stop;
+      //! Update dynamic DNS command
+      std::string m_command_dyndns_update;
       //! True if modem is powered on.
       bool m_powered;
       //! Current state machine state.
@@ -117,6 +127,7 @@ namespace Transports
       //! Interface IPv4 address.
       Address m_address;
       Time::Counter<double> m_conn_watchdog;
+      Time::Counter<double> m_dyndns_watchdog;
 
       Task(const std::string& name, Tasks::Context& ctx):
         Tasks::Task(name, ctx),
@@ -184,11 +195,28 @@ namespace Transports
         .defaultValue("true")
         .description("Enable or disable IP forward");
 
+        param("Enable Dynamic DNS", m_args.dyn_dns)
+        .defaultValue("false")
+        .scope(Tasks::Parameter::SCOPE_GLOBAL)
+        .visibility(Tasks::Parameter::VISIBILITY_USER)
+        .description("Enable or disable Dynamic DNS");
+
+        param("DynDNS Update Periodicity", m_args.dyn_dns_period)
+        .defaultValue("60")
+        .units(Units::Second)
+        .description("Number of seconds between dynamic DNS updates");
+
+        param("DynDNS URL", m_args.dyn_dns_url)
+        .defaultValue("")
+        .description("URL used to update dynamic DNS");
+
+
         Path script = m_ctx.dir_scripts / "dune-mobile-inet.sh";
         m_command_connect = String::str("/bin/sh %s start > /dev/null 2>&1", script.c_str());
         m_command_disconnect = String::str("/bin/sh %s stop > /dev/null 2>&1", script.c_str());
         m_command_nat_start = String::str("/bin/sh %s nat_start > /dev/null 2>&1", script.c_str());
         m_command_nat_stop = String::str("/bin/sh %s nat_stop > /dev/null 2>&1", script.c_str());
+        m_command_dyndns_update = String::str("/bin/sh %s dyndns_update > /dev/null 2>&1", script.c_str());
 
         bind<IMC::PowerChannelState>(this);
 
@@ -205,6 +233,9 @@ namespace Transports
       {
         if (m_args.power_channel.empty())
           m_powered = true;
+
+        if (paramChanged(m_args.dyn_dns_period))
+          m_dyndns_watchdog.setTop(m_args.dyn_dns_period);
       }
 
       void
@@ -351,6 +382,22 @@ namespace Transports
       }
 
       void
+      updateDynDNS()
+      {
+
+        inf("Updating dynamic dns.");
+
+        if (!m_args.dyn_dns)
+          return;
+
+        Environment::set("DYNDNS_URL", m_args.dyn_dns_url);
+        if (std::system(m_command_dyndns_update.c_str()) == -1)
+          err(DTR("failed to update dynamic DNS"));
+
+        m_dyndns_watchdog.reset();
+      }
+
+      void
       updateStateMachine(void)
       {
         switch (m_sm_state)
@@ -362,7 +409,7 @@ namespace Transports
             debug("starting activation sequence");
             setEntityState(IMC::EntityState::ESTA_NORMAL, Status::CODE_ACTIVATING);
             if (!m_args.power_channel.empty())
-             m_sm_state = SM_ACT_POWER_ON;
+              m_sm_state = SM_ACT_POWER_ON;
             else
               m_sm_state = SM_ACT_MODEM_WAIT;
             /* no break */
@@ -484,6 +531,11 @@ namespace Transports
         {
           waitForMessages(1.0);
           updateStateMachine();
+
+          if( m_dyndns_watchdog.overflow() && isConnected())
+          {
+            updateDynDNS();
+          }
         }
       }
     };

@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: José Braga                                                       *
@@ -44,6 +46,10 @@ namespace Supervisors
       bool acoustic;
       //! Acoustic reports periodicity.
       double acoustic_period;
+      //! Enable radio reports.
+      bool radio;
+      //! Acoustic reports periodicity.
+      double radio_period;
     };
 
     struct Task: public DUNE::Tasks::Task
@@ -74,6 +80,20 @@ namespace Supervisors
         .maximumValue("600")
         .description("Reports periodicity");
 
+        param(DTR_RT("Radio Reports"), m_args.radio)
+        .visibility(Tasks::Parameter::VISIBILITY_USER)
+        .defaultValue("false")
+        .description("Enable Radio system state reporting");
+
+        param(DTR_RT("Radio Reports Periodicity"), m_args.radio_period)
+        .visibility(Tasks::Parameter::VISIBILITY_USER)
+        .units(Units::Second)
+        .defaultValue("3")
+        .minimumValue("0.3")
+        .maximumValue("600")
+        .description("Reports periodicity");
+
+
         bind<IMC::ReportControl>(this);
       }
 
@@ -102,6 +122,29 @@ namespace Supervisors
             dispatch(rc, DF_LOOP_BACK);
           }
         }
+
+        if (paramChanged(m_args.radio) || paramChanged(m_args.radio_period))
+        {
+          if (m_args.radio)
+          {
+            IMC::ReportControl rc;
+            rc.op = IMC::ReportControl::OP_REQUEST_START;
+            rc.comm_interface = IMC::ReportControl::CI_RADIO;
+            rc.period = m_args.radio_period;
+            rc.sys_dst = "broadcast";
+            dispatch(rc, DF_LOOP_BACK);
+          }
+          else
+          {
+            IMC::ReportControl rc;
+            rc.op = IMC::ReportControl::OP_REQUEST_STOP;
+            rc.comm_interface = IMC::ReportControl::CI_RADIO;
+            rc.period = m_args.radio_period;
+            rc.sys_dst = "broadcast";
+            dispatch(rc, DF_LOOP_BACK);
+          }
+        }
+
 
         if (m_dispatcher.isEmpty())
           setEntityState(IMC::EntityState::ESTA_NORMAL, Status::CODE_IDLE);

@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Ricardo Martins                                                  *
@@ -72,16 +74,17 @@ namespace Transports
         IMC::TextMessage sms;
         std::string location;
         unsigned read_count = 0;
-
+        bool text_mode = true;
         sendAT("+CMGL=\"ALL\"");
 
         //! Read all messages.
-        while (readSMS(location, sms.origin, sms.text))
+        while (readSMS(location, sms.origin, sms.text,text_mode))
         {
           if ((location == "\"REC UNREAD\"") || (location == "\"REC READ\""))
           {
             ++read_count;
-            getTask()->dispatch(sms);
+            if(text_mode)
+            	getTask()->dispatch(sms);
           }
         }
 
@@ -215,7 +218,12 @@ namespace Transports
           return true;
         if (String::startsWith(str, "^RSSI"))
           return true;
-
+        if(String::startsWith(str, "+CRING")) //incoming call
+        	return true;
+        if(String::startsWith(str, "^CEND:")) //end of call
+                	return true;
+        if(String::startsWith(str, "NO CARRIER")) //missed call
+        	return true;
         return false;
       }
 
@@ -248,7 +256,7 @@ namespace Transports
       }
 
       bool
-      readSMS(std::string& location, std::string& origin, std::string& text)
+      readSMS(std::string& location, std::string& origin, std::string& text, bool& text_mode)
       {
         std::string header = readLine();
         if (header == "OK")
@@ -275,7 +283,34 @@ namespace Transports
 
         location = parts[1];
         origin = std::string(parts[2], 1, parts[2].size() - 2);
-        text = readLine();
+        std::string incoming_data = readLine();
+
+        if(Algorithms::Base64::validBase64(incoming_data))
+        {
+        	text_mode = false;
+        	Utils::ByteBuffer bfr;
+			std::string decoded = Algorithms::Base64::decode(incoming_data);
+			std::copy(decoded.begin(),decoded.end(),bfr.getBuffer());
+			uint16_t length = decoded.size();
+			try
+			{
+				IMC::Message* msg_d = IMC::Packet::deserialize(bfr.getBuffer(), length);
+				getTask()->inf(DTR("received IMC message of type %s via SMS"),msg_d->getName());
+				getTask()->dispatch(msg_d);
+			}
+			catch(...) //InvalidSync || InvalidMessageId || InvalidCrc
+			{
+				getTask()->war(DTR("Parsing unrecognized Base64 message as text"));
+				text.assign(incoming_data);
+				text_mode = true;
+				return true;
+			}
+        }
+        else
+        {
+        	text.assign(incoming_data);
+        	text_mode = true;
+        }
         return true;
       }
     };

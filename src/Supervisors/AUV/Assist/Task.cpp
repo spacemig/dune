@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Pedro Calado                                                     *
@@ -42,11 +44,13 @@ namespace Supervisors
       static const float c_gen_timeout = 3.0;
       //! Stabilization time before testing ascent rate
       static const float c_stab_time = 20.0;
+      //! Initial dislodge rpm
+      static const float c_rpm_start = 600.0;
+      //! RPM increment
+      static const float c_rpm_step = 200.0;
 
       struct Arguments
       {
-        //! RPM value for dislodging the vehicle
-        float dislodge_rpm;
         //! Depth threshold to consider that it is submerged
         float depth_threshold;
         //! Threshold for the depth rate of change
@@ -81,8 +85,6 @@ namespace Supervisors
         float m_depth;
         //! Current Medium
         uint8_t m_medium;
-        //! Current vehicle state
-        uint8_t m_vstate;
         //! Rate of ascent
         VerticalMonitor* m_vmon;
         //! Task's state
@@ -95,6 +97,12 @@ namespace Supervisors
         float m_finish_depth;
         //! Valid GPS signal
         bool m_gps;
+        //! Requires a valid initial GPS fix.
+        bool m_first_fix;
+        //! RPM value for dislodging the vehicle
+        float m_dislodge_rpm;
+        //! Current motor status.
+        bool m_motor;
         //! Task arguments.
         Arguments m_args;
 
@@ -105,10 +113,10 @@ namespace Supervisors
           m_dtimer(c_stab_time),
           m_ltimer(c_stab_time),
           m_finish_depth(-1.0),
-          m_gps(false)
+          m_gps(false),
+          m_first_fix(false),
+          m_dislodge_rpm(c_rpm_start)
         {
-          m_ctx.config.get("General", "Maximum Underwater RPMs", "1700.0", m_args.dislodge_rpm);
-
           m_ctx.config.get("General", "Underwater Depth Threshold", "0.3", m_args.depth_threshold);
 
           param("Minimum Ascent Rate", m_args.min_ascent_rate)
@@ -129,11 +137,11 @@ namespace Supervisors
 
           bind<IMC::GpsFix>(this);
           bind<IMC::Heartbeat>(this);
-          bind<IMC::VehicleState>(this);
           bind<IMC::VehicleMedium>(this);
           bind<IMC::EstimatedState>(this);
           bind<IMC::PlanGeneration>(this);
           bind<IMC::PlanControl>(this);
+          bind<IMC::Rpm>(this);
         }
 
         void
@@ -170,9 +178,14 @@ namespace Supervisors
             return;
 
           if (msg->validity & IMC::GpsFix::GFV_VALID_POS)
+          {
             m_gps = true;
+            m_first_fix = true;
+          }
           else
+          {
             m_gps = false;
+          }
         }
 
         void
@@ -181,16 +194,9 @@ namespace Supervisors
           if (msg->getSource() == getSystemId())
             return;
 
-          if ((msg->getSource() & 0x4000) == 0)
-            return;
-
-          m_ltimer.reset();
-        }
-
-        void
-        consume(const IMC::VehicleState* msg)
-        {
-          m_vstate = msg->op_mode;
+          // CCU's mask.
+          if (IMC::AddressResolver::isCCU(msg->getSource()))
+            m_ltimer.reset();
         }
 
         void
@@ -207,7 +213,10 @@ namespace Supervisors
 
           // reset finish depth if the vehicle comes to the surface
           if (m_depth < m_args.depth_threshold)
+          {
+            m_dislodge_rpm = c_rpm_start;
             m_finish_depth = -1.0;
+          }
         }
 
         void
@@ -248,6 +257,13 @@ namespace Supervisors
                 (msg->plan_id == m_args.plan_id))
               setState(ST_START_DISLODGE);
           }
+        }
+
+        void
+        consume(const IMC::Rpm* msg)
+        {
+            //! Motor State
+            m_motor = (msg->value == 0) ? false : true;
         }
 
         //! Check if the received PlanControl message reports to
@@ -299,9 +315,12 @@ namespace Supervisors
           pg.op = IMC::PlanGeneration::OP_REQUEST;
           pg.cmd = IMC::PlanGeneration::CMD_EXECUTE;
           pg.plan_id = m_args.plan_id;
-          pg.params = (Utils::String::str("rpm=%.1f;", m_args.dislodge_rpm) +
+          pg.params = (Utils::String::str("rpm=%.1f;", m_dislodge_rpm) +
                        "ignore_errors=true;calibrate=false");
           dispatch(pg);
+
+          // next dislodge will be with higher rpms.
+          m_dislodge_rpm += c_rpm_step;
         }
 
         //! Test the main conditions to consider throwing a dislodge plan
@@ -309,8 +328,10 @@ namespace Supervisors
         bool
         mainConditions(void)
         {
-          if ((m_vstate != IMC::VehicleState::VS_SERVICE) &&
-              (m_vstate != IMC::VehicleState::VS_ERROR))
+          if (m_motor)
+            return false;
+
+          if (!m_first_fix)
             return false;
 
           if (m_gps)

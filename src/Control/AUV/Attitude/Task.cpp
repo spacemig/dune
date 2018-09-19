@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Jorge Estrela da Silva (original controller implementation)      *
@@ -136,6 +138,8 @@ namespace Control
         float depth_threshold;
         //! Roll speed compensation.
         RollCompensation rc;
+        //!
+        int sampling_rate_relation;
       };
 
       struct Task: public DUNE::Control::BasicAutopilot
@@ -158,6 +162,8 @@ namespace Control
         bool m_extra_pitch;
         //! Task Arguments.
         Arguments m_args;
+
+        int m_sampling_rate_relation;
 
         Task(const std::string& name, Tasks::Context& ctx):
           DUNE::Control::BasicAutopilot(name, ctx, c_controllable, c_required),
@@ -309,6 +315,12 @@ namespace Control
           .maximumValue("2.0")
           .description("Roll's minimum proportional gain in speed compensation");
 
+          param("Depth-to-pitch PID sampling rate relation", m_args.sampling_rate_relation)
+          .defaultValue("1")
+          .minimumValue("1")
+          .maximumValue("5")
+          .description("Depth-to-pitch sampling rate relation");
+
           m_ctx.config.get("General", "Underwater Depth Threshold", "0.3", m_args.depth_threshold);
         }
 
@@ -317,6 +329,7 @@ namespace Control
         onResourceInitialization(void)
         {
           BasicAutopilot::onResourceInitialization();
+
         }
 
         //! Acquire resources.
@@ -403,6 +416,7 @@ namespace Control
           }
 
           initializePIDs();
+          m_sampling_rate_relation = m_args.sampling_rate_relation;
         }
 
         //! Initialize PID related variables.
@@ -521,7 +535,6 @@ namespace Control
             {
               case VERTICAL_MODE_DEPTH:
                 z_error = getVerticalRef() - msg->depth;
-
                 if (getVerticalRef() < m_args.depth_threshold)
                 {
                   if (m_args.force_pitch && std::fabs(z_error) < m_args.depth_threshold)
@@ -565,8 +578,16 @@ namespace Control
             if (use_offset)
               z_error += m_args.depth_offset;
 
-            if (!surface)
-            {
+
+            // Depth-to-pitch PID sampling rate relation
+            m_sampling_rate_relation++;
+
+            if(m_sampling_rate_relation >= m_args.sampling_rate_relation)
+            { 
+              m_sampling_rate_relation = 0;
+
+              if (!surface)
+              {
               // extra pitch.
               if (m_extra_pitch)
               {
@@ -595,15 +616,21 @@ namespace Control
 
               // Positive depth implies negative pitch
               cmd = -m_pid[LP_DEPTH].step(timestep, z_error, val);
+              }
+              else
+              {
+                cmd = m_args.surface_pitch;
+              }
+              // Log the desired pitch
+              m_pitch_ref.value = cmd;
+              dispatch(m_pitch_ref);
             }
             else
             {
-              cmd = m_args.surface_pitch;
+              cmd = m_pitch_ref.value;
+              dispatch(m_pitch_ref); 
             }
 
-            // Log the desired pitch
-            m_pitch_ref.value = cmd;
-            dispatch(m_pitch_ref);
           }
 
           //Now, track pitch

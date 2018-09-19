@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Ricardo Martins                                                  *
@@ -62,12 +64,16 @@ namespace Monitors
       float m_fuel;
       //! Confidence in fuel level.
       float m_fuel_conf;
+      //! Batteries voltage
+      float m_bat_voltage;
       //! True if executing plan.
       bool m_in_mission;
       //! Executing plan's progress.
       float m_progress;
       //! Iridium request identifier.
       unsigned m_req;
+      //! Vehicle State
+      uint8_t m_vstate;
       //! Lost communications timer.
       Counter<double> m_lost_coms_timer;
       //! Medium handler.
@@ -123,6 +129,15 @@ namespace Monitors
         bind<IMC::ReportControl>(this);
         bind<IMC::VehicleMedium>(this);
         bind<IMC::TextMessage>(this);
+        bind<IMC::VehicleState>(this);
+        bind<IMC::Voltage>(this);
+      }
+
+      void
+      onUpdateParameters(void)
+      {
+        if (paramChanged(m_args.heartbeat_tout))
+          m_lost_coms_timer.setTop(m_args.heartbeat_tout);
       }
 
       void
@@ -150,7 +165,9 @@ namespace Monitors
         m_lost_coms_timer.setTop(m_args.heartbeat_tout);
         m_fuel = -1.0;
         m_fuel_conf = -1.0;
+        m_bat_voltage = -1.0;
         m_progress = -1.0;
+        m_vstate = '?';
       }
 
       void
@@ -180,11 +197,11 @@ namespace Monitors
 
           Time::BrokenDown bdt;
 
-          m_emsg = String::str("(%s) %02u:%02u:%02u / %d %f, %d %f / f:%d c:%d",
+          m_emsg = String::str("(%s) %02u:%02u:%02u / %d %f, %d %f / f:%d v:%d c:%d / s: %c",
                                getSystemName(),
                                bdt.hour, bdt.minutes, bdt.seconds,
                                lat_deg, lat_min, lon_deg, lon_min,
-                               (int)m_fuel, (int)m_fuel_conf);
+                               (int)m_fuel, (int) m_bat_voltage, (int)m_fuel_conf, vehicleStateChar(m_vstate));
 
           m_emsg += m_in_mission ? String::str(" / p:%d", (int)m_progress) : "";
         }
@@ -240,10 +257,9 @@ namespace Monitors
         if (msg->getSource() == getSystemId())
           return;
 
-        if ((msg->getSource() & 0x4000) == 0)
-          return;
-
-        m_lost_coms_timer.reset();
+        // CCU's mask.
+        if (IMC::AddressResolver::isCCU(msg->getSource()))
+          m_lost_coms_timer.reset();
       }
 
       void
@@ -251,6 +267,15 @@ namespace Monitors
       {
         m_fuel = msg->value;
         m_fuel_conf = msg->confidence;
+      }
+
+      void
+      consume(const IMC::Voltage* msg)
+      {
+        if(msg->getSourceEntity() != resolveEntity("Batteries"))
+          return;
+
+        m_bat_voltage = msg->value * 10;
       }
 
       void
@@ -267,6 +292,34 @@ namespace Monitors
 
         if (m_hand.isUnderwater())
           m_lost_coms_timer.reset();
+      }
+
+      void
+      consume(const IMC::VehicleState* msg)
+      {
+        m_vstate = msg->op_mode;
+      }
+
+      char
+      vehicleStateChar(const uint8_t vstate)
+      {
+        switch((IMC::VehicleState::OperationModeEnum) vstate)
+        {
+          case IMC::VehicleState::VS_BOOT:
+            return 'B';
+          case IMC::VehicleState::VS_CALIBRATION:
+            return 'C';
+          case IMC::VehicleState::VS_ERROR:
+            return 'E';
+          case IMC::VehicleState::VS_EXTERNAL:
+            return 'X';
+          case IMC::VehicleState::VS_MANEUVER:
+            return 'M';
+          case IMC::VehicleState::VS_SERVICE:
+            return 'S';
+          default:
+            return '?';
+        }
       }
 
       //! Send SMS request.
@@ -292,12 +345,13 @@ namespace Monitors
         {
           std::string msg;
           Time::BrokenDown bdt;
-          msg = String::str("(%s) %02u:%02u:%02u / Unknown Location / f:%d c:%d",
+          msg = String::str("(%s) %02u:%02u:%02u / Unknown Location / f:%d v:%d c:%d",
                                getSystemName(),
                                bdt.hour, bdt.minutes, bdt.seconds,
-                               (int)m_fuel, (int)m_fuel_conf);
+                            (int)m_fuel, (int)m_bat_voltage, (int)m_fuel_conf);
 
           msg += m_in_mission ? String::str(" / p:%d", (int)m_progress) : "";
+          msg += String::str("/ s: %c", vehicleStateChar(m_vstate));
 
           sms.contents = String::str("(%s) %s", prefix, msg.c_str());
         }

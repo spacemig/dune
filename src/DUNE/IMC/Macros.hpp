@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,25 +8,27 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Ricardo Martins                                                  *
 //***************************************************************************
 // Automatically generated.                                                 *
 //***************************************************************************
-// IMC XML MD5: ac6fc6f4b1f5c445991672dbda04723d                            *
+// IMC XML MD5: 60bae9d2a5dfb6cb336b442c839133fb                            *
 //***************************************************************************
 
 #ifndef DUNE_IMC_MACROS_HPP_INCLUDED_
@@ -90,6 +92,10 @@
 #define DUNE_IMC_HISTORICSONARDATA 109
 //! HistoricEvent identification number.
 #define DUNE_IMC_HISTORICEVENT 110
+//! VerticalProfile identification number.
+#define DUNE_IMC_VERTICALPROFILE 111
+//! ProfileSample identification number.
+#define DUNE_IMC_PROFILESAMPLE 112
 //! Heartbeat identification number.
 #define DUNE_IMC_HEARTBEAT 150
 //! Announce identification number.
@@ -136,6 +142,10 @@
 #define DUNE_IMC_HISTORICDATAQUERY 187
 //! RemoteCommand identification number.
 #define DUNE_IMC_REMOTECOMMAND 188
+//! CommSystemsQuery identification number.
+#define DUNE_IMC_COMMSYSTEMSQUERY 189
+//! TelemetryMsg identification number.
+#define DUNE_IMC_TELEMETRYMSG 190
 //! LblRange identification number.
 #define DUNE_IMC_LBLRANGE 200
 //! LblBeacon identification number.
@@ -202,6 +212,8 @@
 #define DUNE_IMC_DEVDATATEXT 273
 //! DevDataBinary identification number.
 #define DUNE_IMC_DEVDATABINARY 274
+//! Force identification number.
+#define DUNE_IMC_FORCE 275
 //! SonarData identification number.
 #define DUNE_IMC_SONARDATA 276
 //! Pulse identification number.
@@ -428,6 +440,14 @@
 #define DUNE_IMC_TAKEOFF 491
 //! Land identification number.
 #define DUNE_IMC_LAND 492
+//! AutonomousSection identification number.
+#define DUNE_IMC_AUTONOMOUSSECTION 493
+//! FollowPoint identification number.
+#define DUNE_IMC_FOLLOWPOINT 494
+//! Alignment identification number.
+#define DUNE_IMC_ALIGNMENT 495
+//! StationKeepingExtended identification number.
+#define DUNE_IMC_STATIONKEEPINGEXTENDED 496
 //! VehicleState identification number.
 #define DUNE_IMC_VEHICLESTATE 500
 //! VehicleCommand identification number.
@@ -456,6 +476,20 @@
 #define DUNE_IMC_FORMATIONSTATE 512
 //! ReportControl identification number.
 #define DUNE_IMC_REPORTCONTROL 513
+//! StateReport identification number.
+#define DUNE_IMC_STATEREPORT 514
+//! TransmissionRequest identification number.
+#define DUNE_IMC_TRANSMISSIONREQUEST 515
+//! TransmissionStatus identification number.
+#define DUNE_IMC_TRANSMISSIONSTATUS 516
+//! SmsRequest identification number.
+#define DUNE_IMC_SMSREQUEST 517
+//! SmsStatus identification number.
+#define DUNE_IMC_SMSSTATUS 518
+//! VtolState identification number.
+#define DUNE_IMC_VTOLSTATE 519
+//! ArmingState identification number.
+#define DUNE_IMC_ARMINGSTATE 520
 //! Abort identification number.
 #define DUNE_IMC_ABORT 550
 //! PlanSpecification identification number.
@@ -564,6 +598,14 @@
 #define DUNE_IMC_FORMATIONCONTROLPARAMS 822
 //! FormationEvaluation identification number.
 #define DUNE_IMC_FORMATIONEVALUATION 823
+//! SoiWaypoint identification number.
+#define DUNE_IMC_SOIWAYPOINT 850
+//! SoiPlan identification number.
+#define DUNE_IMC_SOIPLAN 851
+//! SoiCommand identification number.
+#define DUNE_IMC_SOICOMMAND 852
+//! SoiState identification number.
+#define DUNE_IMC_SOISTATE 853
 //! MessagePart identification number.
 #define DUNE_IMC_MESSAGEPART 877
 //! NeptusBlob identification number.
@@ -602,5 +644,11 @@
 #define DUNE_IMC_OPTICALBACKSCATTER 904
 //! Tachograph identification number.
 #define DUNE_IMC_TACHOGRAPH 905
+//! ApmStatus identification number.
+#define DUNE_IMC_APMSTATUS 906
+//! SadcReadings identification number.
+#define DUNE_IMC_SADCREADINGS 907
+//! DmsDetection identification number.
+#define DUNE_IMC_DMSDETECTION 908
 
 #endif

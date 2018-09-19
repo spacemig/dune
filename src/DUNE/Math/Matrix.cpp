@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: Aníbal Matos                                                     *
@@ -44,6 +46,7 @@
 
 // DUNE headers.
 #include <DUNE/Utils/String.hpp>
+#include <DUNE/Math/Constants.hpp>
 #include <DUNE/Math/Matrix.hpp>
 #include <DUNE/Math/General.hpp>
 #include <DUNE/Parsers/Config.hpp>
@@ -115,7 +118,7 @@ namespace DUNE
       }
     }
 
-    Matrix::Matrix(double* data, size_t r, size_t c)
+    Matrix::Matrix(const double* data, size_t r, size_t c)
     {
       if (!r || !c)
         throw Error("Invalid dimension!");
@@ -844,7 +847,7 @@ namespace DUNE
     }
 
     Matrix
-    Matrix::operator-(void)
+    Matrix::operator-(void) const
     {
       if (isEmpty())
         throw Error("Trying to access an empty matrix!");
@@ -1201,7 +1204,11 @@ namespace DUNE
         double cy = std::cos(ea[2] / 2);
         double sy = std::sin(ea[2] / 2);
 
-        double q[4] = {cr* cp * cy + sr * sp * sy, sr * cp * cy - cr * sp * sy, cr * sp * cy + sr * cp * sy, cr * cp * sy - sr * sp * cy};
+        double q[4] = {cr * cp * cy + sr * sp * sy,
+                       sr * cp * cy - cr * sp * sy,
+                       cr * sp * cy + sr * cp * sy,
+                       cr * cp * sy - sr * sp * cy};
+
         return Matrix(q, 4, 1);
       }
 
@@ -1245,17 +1252,26 @@ namespace DUNE
         return Matrix(ea, 3, 1);
       }
 
-      // quaternion to Euler angles
+      // Quaternion to Euler angles
       if (m_nrows == 4 && m_ncols == 1)
       {
-        double q[4] = {element(0, 0), element(1, 0), element(2, 0), element(3, 0)};
+        double norm = norm_p(2);
+        double q[4] = {element(0, 0) / norm,
+                       element(1, 0) / norm,
+                       element(2, 0) / norm,
+                       element(3, 0) / norm};
 
-        double ea[3] =
-        {
-          std::atan2(2 * (q[2] * q[3] - q[0] * q[1]), 1 - 2 * (q[1] * q[1] + q[2] * q[2])),
-          std::asin(2 * (q[1] * q[3] - q[0] * q[2])),
-          std::atan2(2 * (q[1] * q[2] - q[0] * q[3]), 1 - 2 * (q[2] * q[2] + q[3] * q[3]))
-        };
+        double roll = std::atan2(2 * (q[0] * q[1] + q[2] * q[3]), 1 - 2 * (q[1] * q[1] + q[2] * q[2]));
+
+        double pitch = 2 * (q[0] * q[2] - q[3] * q[1]);
+        if (std::fabs(pitch) >= 1)
+          pitch = c_half_pi * pitch / std::fabs(pitch);
+        else
+          pitch = std::asin(pitch);
+
+        double yaw =  std::atan2(2 * (q[0] * q[3] + q[1] * q[2]), 1 - 2 * (q[2] * q[2] + q[3] * q[3]));
+
+        double ea[3] = { roll, pitch, yaw };
 
         return Matrix(ea, 3, 1);
       }

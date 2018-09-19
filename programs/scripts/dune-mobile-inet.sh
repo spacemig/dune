@@ -1,6 +1,6 @@
 #! /bin/sh
 ############################################################################
-# Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      #
+# Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      #
 # Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  #
 ############################################################################
 # This file is part of DUNE: Unified Navigation Environment.               #
@@ -9,18 +9,20 @@
 # Licencees holding valid commercial DUNE licences may use this file in    #
 # accordance with the commercial licence agreement provided with the       #
 # Software or, alternatively, in accordance with the terms contained in a  #
-# written agreement between you and Universidade do Porto. For licensing   #
-# terms, conditions, and further information contact lsts@fe.up.pt.        #
+# written agreement between you and Faculdade de Engenharia da             #
+# Universidade do Porto. For licensing terms, conditions, and further      #
+# information contact lsts@fe.up.pt.                                       #
 #                                                                          #
-# European Union Public Licence - EUPL v.1.1 Usage                         #
-# Alternatively, this file may be used under the terms of the EUPL,        #
-# Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       #
+# Modified European Union Public Licence - EUPL v.1.1 Usage                #
+# Alternatively, this file may be used under the terms of the Modified     #
+# EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md #
 # included in the packaging of this file. You may not use this work        #
 # except in compliance with the Licence. Unless required by applicable     #
 # law or agreed to in writing, software distributed under the Licence is   #
 # distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     #
 # ANY KIND, either express or implied. See the Licence for the specific    #
 # language governing permissions and limitations at                        #
+# https://github.com/LSTS/dune/blob/master/LICENCE.md and                  #
 # http://ec.europa.eu/idabc/eupl.html.                                     #
 ############################################################################
 # Author: Ricardo Martins                                                  #
@@ -102,18 +104,16 @@ modem_probe()
 }
 
 # Update DynDNS IPv4 address.
-# @param[in] ip IPv4 address.
 dyndns_update()
 {
-    echo $DYNDNS_USER $DYNDNS_PASS $DYNDNS_HOST
-
-    if [ -z "$DYNDNS_USER" ] || [ -z "$DYNDNS_PASS" ] || [ -z "$DYNDNS_HOST" ]; then
-        return 0
+    if [ -z "$DYNDNS_URL" ]; then
+    	log err "DynDNS: Service URL not set."
+        exit 1
     fi
-
-    ip="$1"
-    url="http://$DYNDNS_USER:$DYNDNS_PASS@members.dyndns.org/nic/update?hostname=$DYNDNS_HOST&myip=$ip&wildcard=NOCHG&mx=NOCHG&backmx=NOCHG"
-    wget "$url" -O -
+    
+    output=$(wget "$DYNDNS_URL" -O -)   
+    log info "DynDNS: Updated successfully: $output"
+    exit 0 
 }
 
 ppp_start()
@@ -237,6 +237,9 @@ stop()
 }
 
 case "$1" in
+    dyndns_update)
+        dyndns_update
+        ;;
     start)
         start
         ;;

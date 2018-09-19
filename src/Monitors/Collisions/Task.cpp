@@ -1,5 +1,5 @@
 //***************************************************************************
-// Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      *
+// Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      *
 // Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  *
 //***************************************************************************
 // This file is part of DUNE: Unified Navigation Environment.               *
@@ -8,18 +8,20 @@
 // Licencees holding valid commercial DUNE licences may use this file in    *
 // accordance with the commercial licence agreement provided with the       *
 // Software or, alternatively, in accordance with the terms contained in a  *
-// written agreement between you and Universidade do Porto. For licensing   *
-// terms, conditions, and further information contact lsts@fe.up.pt.        *
+// written agreement between you and Faculdade de Engenharia da             *
+// Universidade do Porto. For licensing terms, conditions, and further      *
+// information contact lsts@fe.up.pt.                                       *
 //                                                                          *
-// European Union Public Licence - EUPL v.1.1 Usage                         *
-// Alternatively, this file may be used under the terms of the EUPL,        *
-// Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       *
+// Modified European Union Public Licence - EUPL v.1.1 Usage                *
+// Alternatively, this file may be used under the terms of the Modified     *
+// EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md *
 // included in the packaging of this file. You may not use this work        *
 // except in compliance with the Licence. Unless required by applicable     *
 // law or agreed to in writing, software distributed under the Licence is   *
 // distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     *
 // ANY KIND, either express or implied. See the Licence for the specific    *
 // language governing permissions and limitations at                        *
+// https://github.com/LSTS/dune/blob/master/LICENCE.md and                  *
 // http://ec.europa.eu/idabc/eupl.html.                                     *
 //***************************************************************************
 // Author: José Braga                                                       *
@@ -98,6 +100,8 @@ namespace Monitors
       bool m_braking;
       //! Motor's rpms
       int m_rpms;
+      //! Collision report
+      std::string m_report;
       //! Task arguments.
       Arguments m_args;
 
@@ -118,9 +122,9 @@ namespace Monitors
         .description("Number of moving average samples to smooth accelerations");
 
         param("Absolute Moving Average Samples", m_args.avg_samples_abs)
-        .defaultValue("3")
+        .defaultValue("5")
         .minimumValue("2")
-        .maximumValue("5")
+        .maximumValue("100")
         .description("Number of moving average samples to smooth accelerations");
 
         param("Maximum Deviation Factor", m_args.k_std)
@@ -257,6 +261,7 @@ namespace Monitors
           m_collision.value = msg->x;
           m_collision.type = (IMC::Collision::CD_IMPACT |
                               IMC::Collision::CD_X);
+          m_report = "X-Axis | Impact";
 
           collided();
         }
@@ -267,6 +272,7 @@ namespace Monitors
           m_collision.value = msg->z;
           m_collision.type = (IMC::Collision::CD_IMPACT |
                               IMC::Collision::CD_Z);
+          m_report = "Z-Axis | Impact";
 
           collided();
         }
@@ -276,6 +282,7 @@ namespace Monitors
         {
           m_collision.value = mean_x_abs;
           m_collision.type = IMC::Collision::CD_X;
+          m_report = "X-Axis";
 
           collided();
         }
@@ -286,6 +293,7 @@ namespace Monitors
         {
           m_collision.value = mean_z_abs;
           m_collision.type = IMC::Collision::CD_Z;
+          m_report = "Z-Axis";
 
           collided();
         }
@@ -363,7 +371,7 @@ namespace Monitors
         }
 
         // Change state and send state to the bus.
-        setEntityState(IMC::EntityState::ESTA_ERROR, DTR("collision detected"));
+        setEntityState(IMC::EntityState::ESTA_ERROR, Utils::String::str(DTR("Collision detected: %s"), m_report.c_str()));
       }
 
       void

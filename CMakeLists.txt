@@ -1,5 +1,5 @@
 ############################################################################
-# Copyright 2007-2016 Universidade do Porto - Faculdade de Engenharia      #
+# Copyright 2007-2017 Universidade do Porto - Faculdade de Engenharia      #
 # Laboratório de Sistemas e Tecnologia Subaquática (LSTS)                  #
 ############################################################################
 # This file is part of DUNE: Unified Navigation Environment.               #
@@ -8,18 +8,20 @@
 # Licencees holding valid commercial DUNE licences may use this file in    #
 # accordance with the commercial licence agreement provided with the       #
 # Software or, alternatively, in accordance with the terms contained in a  #
-# written agreement between you and Universidade do Porto. For licensing   #
-# terms, conditions, and further information contact lsts@fe.up.pt.        #
+# written agreement between you and Faculdade de Engenharia da             #
+# Universidade do Porto. For licensing terms, conditions, and further      #
+# information contact lsts@fe.up.pt.                                       #
 #                                                                          #
-# European Union Public Licence - EUPL v.1.1 Usage                         #
-# Alternatively, this file may be used under the terms of the EUPL,        #
-# Version 1.1 only (the "Licence"), appearing in the file LICENCE.md       #
+# Modified European Union Public Licence - EUPL v.1.1 Usage                #
+# Alternatively, this file may be used under the terms of the Modified     #
+# EUPL, Version 1.1 only (the "Licence"), appearing in the file LICENCE.md #
 # included in the packaging of this file. You may not use this work        #
 # except in compliance with the Licence. Unless required by applicable     #
 # law or agreed to in writing, software distributed under the Licence is   #
 # distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF     #
 # ANY KIND, either express or implied. See the Licence for the specific    #
 # language governing permissions and limitations at                        #
+# https://github.com/LSTS/dune/blob/master/LICENCE.md and                  #
 # http://ec.europa.eu/idabc/eupl.html.                                     #
 ############################################################################
 # Author: Ricardo Martins                                                  #
@@ -41,10 +43,10 @@ project("DUNE")
 set(PROJECT_NAME "DUNE: Unified Navigation Environment")
 set(PROJECT_SHORT_NAME "DUNE")
 set(PROJECT_VENDOR "Universidade do Porto - LSTS")
-set(PROJECT_COPYRIGHT "Copyright (C) 2007-2016 - ${PROJECT_VENDOR}")
+set(PROJECT_COPYRIGHT "Copyright (C) 2007-2017 - ${PROJECT_VENDOR}")
 set(PROJECT_CONTACT "DUNE <dune@lsts.pt>")
-set(PROJECT_VERSION_YEAR  "2016")
-set(PROJECT_VERSION_MONTH "10")
+set(PROJECT_VERSION_YEAR  "2017")
+set(PROJECT_VERSION_MONTH "01")
 set(PROJECT_VERSION_PATCH "0")
 set(PROJECT_VERSION_RCN   "0")
 
@@ -157,6 +159,10 @@ file(GLOB_RECURSE DUNE_CORE_HEADERS "${PROJECT_SOURCE_DIR}/src/DUNE/*.hpp"
 file(GLOB_RECURSE DUNE_CORE_DEFS    "${PROJECT_SOURCE_DIR}/src/DUNE/*.def")
 string(REPLACE ";" " " DUNE_CORE_HEADERS_STRING "${DUNE_CORE_HEADERS}")
 
+file(GLOB_RECURSE USER_CORE_SOURCES "${PROJECT_SOURCE_DIR}/user/src/USER/*.cpp")
+file(GLOB_RECURSE USER_CORE_HEADERS "${PROJECT_SOURCE_DIR}/user/src/USER/*.hpp")
+string(REPLACE ";" " " USER_CORE_HEADERS_STRING "${USER_CORE_HEADERS}")
+
 configure_file(${PROJECT_SOURCE_DIR}/src/DUNE/Config.hpp.in
   ${DUNE_GENERATED}/src/DUNE/Config.hpp)
 
@@ -165,7 +171,7 @@ install(FILES ${DUNE_GENERATED}/src/DUNE/Config.hpp
 
 include(${PROJECT_SOURCE_DIR}/cmake/Version.cmake)
 
-set_source_files_properties(${DUNE_CORE_SOURCES}
+set_source_files_properties(${DUNE_CORE_SOURCES} ${USER_CORE_SOURCES}
   PROPERTIES COMPILE_FLAGS "${DUNE_CXX_FLAGS} ${DUNE_CXX_FLAGS_STRICT}")
 
 if(DUNE_OS_WINDOWS)
@@ -176,7 +182,7 @@ if(DUNE_OS_WINDOWS)
     ${DUNE_GENERATED}/src/DUNE/Version.rc)
 endif(DUNE_OS_WINDOWS)
 
-foreach(header ${DUNE_CORE_HEADERS})
+foreach(header ${DUNE_CORE_HEADERS} ${USER_CORE_HEADERS})
   string(REGEX REPLACE "${PROJECT_SOURCE_DIR}/" "" header ${header})
   string(REGEX REPLACE "src" "include" destination ${header})
   get_filename_component(destination ${destination} PATH)
@@ -201,18 +207,19 @@ foreach(extlib ${extlibs})
   include(${extlib})
 endforeach(extlib ${extlibs})
 
-include_directories(${DUNE_GENERATED}/src ${PROJECT_SOURCE_DIR}/src ${DUNE_VENDOR_INCS_DIR})
+include_directories(${DUNE_GENERATED}/src ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/user/src ${DUNE_VENDOR_INCS_DIR})
 link_directories(${DUNE_VENDOR_LIBS_DIR})
 set(DUNE_CORE_FILES ${DUNE_CORE_SOURCES} ${DUNE_VENDOR_FILES})
+set(USER_CORE_FILES ${USER_CORE_SOURCES} ${USER_VENDOR_FILES})
 
 if(DUNE_SHARED)
   message(STATUS "Building shared library")
-  add_library(dune-core SHARED ${DUNE_CORE_FILES})
+  add_library(dune-core SHARED ${DUNE_CORE_FILES} ${USER_CORE_FILES} )
   set_target_properties(dune-core PROPERTIES DEFINE_SYMBOL DUNE_DLL_EXPORT)
   target_link_libraries(dune-core ${DUNE_SYS_LIBS})
 else(DUNE_SHARED)
   message(STATUS "Building static library")
-  add_library(dune-core STATIC ${DUNE_CORE_FILES})
+  add_library(dune-core STATIC ${DUNE_CORE_FILES} ${USER_CORE_FILES} )
   if(DUNE_CXX_MICROSOFT AND DUNE_CPU_X86)
     if(DUNE_CPU_32B)
       set_target_properties(dune-core PROPERTIES STATIC_LIBRARY_FLAGS "/machine:x86")
