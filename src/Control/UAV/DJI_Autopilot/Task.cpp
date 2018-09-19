@@ -36,24 +36,15 @@
 // MAVLink headers.
 //#include <mavlink/ardupilotmega/mavlink.h>
 
-// include DJI Onboard SDK here
-
 //DJI OSDK Library Headers
+#include "dji_vehicle.hpp"
+#include "dji_status.hpp"
+#include "dji_telemetry.hpp"
+#include "dji_linux_helpers.hpp"
+#include "flight_control_sample.hpp"
 
-//#include <dji/Onboard-SDK-3.6/osdk-core/api/inc/dji_fo
-//#include <dji/osdk-core/inc/DJI_Follow.h>
-//#include <dji/osdk-core/inc/DJI_Flight.h>
-//#include <dji/osdk-core/inc/DJI_Version.h>
-//#include <dji/osdk-core/inc/DJI_WayPoint.h>
-
-////DJI Linux Application Headers
-//#include <dji/Onboard-SDK-3.6.1/osdk-core/platform/linux/inc/linux_serial_device.hpp>
-//#include <dji/Onboard-SDK-3.6.1/osdk-core/platform/linux/inc/linux_serial_device.hpp>
-//#include <dji/platform/linux/inc/LinuxThread.h>
-//#include <dji/osdk-wrapper/inc/LinuxSetup.h>
-//#include <dji/osdk-wrapper/inc/LinuxFlight.h>
-
-#include <dji/Onboard-SDK-3.6.1/osdk-core/api/inc/dji_vehicle.hpp>
+using namespace DJI::OSDK;
+using namespace DJI::OSDK::Telemetry;
 
 namespace Control
 {
@@ -345,6 +336,12 @@ namespace Control
           try
           {
             //! Instantiate a serialDevice, an API object, flight and waypoint objects and a read thread.
+
+            char* config_file[2] = {"","/home/miguel/rep18/hsfl-dji/UserConfig.txt"};
+            LinuxSetup linuxEnvironment (2, config_file);
+            Vehicle* vehicle = linuxEnvironment.getVehicle();
+
+
 //            serialDevice = new DJI::onboardSDK::LinuxSerialDevice(m_args.uart_dev, m_args.uart_baud);
 //            api = new DJI::onboardSDK::CoreAPI(serialDevice);
 //            flight = new DJI::onboardSDK::Flight(api);
