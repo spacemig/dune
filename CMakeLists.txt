@@ -256,7 +256,7 @@ set_source_files_properties(src/Main/Daemon.cpp
   PROPERTIES
   COMPILE_FLAGS "${DUNE_CXX_FLAGS}")
 target_link_libraries(dune dune-core ${DUNE_SYS_LIBS} ${DUNE_STATIC_TASKS}
-  ${DUNE_VENDOR_LIBS} libdjiosdk-core.a libdjiosdk-platform.a libdjiosdk-wrapper.a libdjiosdk-platform.a)
+  ${DUNE_VENDOR_LIBS})
 
 # Launcher.
 add_executable(dune-launcher
@@ -417,3 +417,5 @@ endif(TESTS)
 #                                CDash                                   #
 ##########################################################################
 include(Dart)
+
+#add_subdirectory(vendor/libraries/dji/osdk-3.6.1/osdk-core)
