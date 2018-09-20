@@ -9,7 +9,8 @@ include_directories(${DJI_OSDK_PATH}/osdk-core/api/inc
                     ${DJI_OSDK_PATH}/osdk-core/platform/linux/inc
                     ${DJI_OSDK_PATH}/osdk-core/platform/default/inc
                     ${DJI_OSDK_PATH}/sample/linux/common
-                    ${DJI_OSDK_PATH}/sample/linux/flight-control)
+                    ${DJI_OSDK_PATH}/sample/linux/flight-control
+                    ${DJI_OSDK_PATH}/sample/linux/telemetry)
 
 file(GLOB DUNE_DJI_FILES
   ${DJI_OSDK_PATH}/osdk-core/api/src/*.cpp
@@ -20,6 +21,7 @@ file(GLOB DUNE_DJI_FILES
   ${DJI_OSDK_PATH}/osdk-core/platform/default/src/*.cpp
   ${DJI_OSDK_PATH}/sample/linux/common/*.cpp
   ${DJI_OSDK_PATH}/sample/linux/flight-control/flight_control_sample.cpp
+  ${DJI_OSDK_PATH}/sample/linux/telemetry/telemetry_sample.cpp
   )
 
 add_library(djiosdk-core
