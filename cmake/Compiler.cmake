@@ -146,6 +146,7 @@ macro(dune_probe_cxx)
     #set(COMMON_CXX_FLAGS "-std=c++11 -pthread")
     #TODO: check if this needs to move from here.
     set(DUNE_CXX_FLAGS "${DUNE_CXX_FLAGS} -std=c++11 -pthread")
+    #set(DUNE_CXX_FLAGS "${DUNE_CXX_FLAGS} -std=c++11")
 
   endif(NOT DUNE_CXX_NAME)
 
