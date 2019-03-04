@@ -28,7 +28,7 @@ add_library(djiosdk-core
         STATIC
         ${DUNE_DJI_FILES})
 
-list(APPEND DUNE_VENDOR_LIBS libdjiosdk-core.a)
+list(APPEND DUNE_VENDOR_LIBS djiosdk-core)
 
 set_source_files_properties(${DUNE_DJI_FILES}
   PROPERTIES COMPILE_FLAGS "${DUNE_CXX_FLAGS} ${DUNE_CXX_FLAGS_STRICT}")
